@@ -35,9 +35,9 @@ Every request accepts a final acknowledgement callback returning `{ ok: true, re
 
 ## HTTP endpoints
 
-- `POST /api/auth/signup`, `POST /api/auth/login`: `{username,password}`; set session cookie.
-- `GET /api/me`: public, returns signed-in user or null.
-- `POST /api/logout`: revoke current session and its sockets.
+- `POST /api/guest`: `{name}`; create an anonymous participant and session cookie. Existing sessions are retained. Old `/api/auth/*` routes return 410.
+- `GET /api/me`: public, returns current guest or null.
+- `POST /api/guest/leave`: revoke current session and its sockets.
 - `GET /api/rooms`: campaign summaries for current user.
 - `POST /api/rooms`: `{name}`, creates room and GM membership.
 - `POST /api/join`: `{code,name,color}`, adds Player membership once.
@@ -50,7 +50,7 @@ Every request accepts a final acknowledgement callback returning `{ ok: true, re
 
 | Table         | Columns / relationships                                                      |
 | ------------- | ---------------------------------------------------------------------------- |
-| `users`       | `id` UUID PK; unique normalized `username`; `password` salt:scrypt digest    |
+| `users`       | `id` UUID PK; internal unique `username`; `display_name`; legacy `password` column unused for guests    |
 | `sessions`    | `token` SHA-256 PK; `user_id` FK; `expires` UTC epoch milliseconds           |
 | `campaigns`   | `id` UUID PK; `name`; unique random `invite`; `state` JSON                   |
 | `memberships` | composite PK (`campaign_id` FK, `user_id` FK); query index for room listings |
@@ -83,3 +83,12 @@ Players receive only the active map, no original map asset IDs or fog stroke coo
 Canvas camera, measurement/range guides, selection and local handout dismissal are personal UI state, not campaign state. Everything affecting the shared game persists on the server. Reconnection is snapshot-based, without offline replay. Incremental protocol versions and migrations should be introduced before changing stored field meanings.
 
 Token appearance is optional for backwards compatibility: `{background, textColor, outlineColor}` are #RRGGBB colors, `outlineWidth` is 0–12 screen pixels, `shape` is circle/square, and `imageFit` is cover/contain. `token:update.assetId` accepts an authorized asset UUID, or null to remove the image. Owners can keep a previously GM-assigned image while editing its style. New images must be owned by the caller, unless they are GM. Uploaded images are processed through the existing authenticated upload route.
+
+## Portable saves
+
+- `GET /api/rooms/:room/export/player`: own profile, owned tokens/art and embedded images; private `resumeKey`.
+- `GET /api/rooms/:room/export/table`: GM gets full `campaign`; player gets filtered `table` with fog baked into map image.
+- `POST /api/restore`: multipart `file`, campaign/table only; creates new IDs for campaign, participants, tokens and images, retains scene IDs within the new campaign, generates new invite. Importer is GM of this new copy.
+- `POST /api/join-save`: multipart `file` (player) plus `code` (invite), or `roomId` for an existing member. Restores profile/tokens and broadcasts authoritative state. Role is never taken from the file. A matching secret can reclaim a player membership and disconnect the old participant.
+
+Version 1 envelope: `{format:"outer-rim-save",version:1,kind,exportedAt,files:[{id,data:base64}]}`. Player payload: `{profile,tokens,assets,resumeKey}`. Campaign/table payload: `{campaign,exporterId,claims:[{memberId,hash}]}`. Only GM campaign exports include recovery claim hashes. The `save_keys` table stores `(campaign_id,user_id,hash)` with primary key `(campaign_id,hash)`. No session cookies or password digests are exported. Shared save validation lives in `server/save-schema.ts`; image references, ownership and decoded contents are checked before campaign changes.

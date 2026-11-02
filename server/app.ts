@@ -1,14 +1,8 @@
 import express from "express";
-import { placeholder } from "./placeholder";
+import { renderMap } from "./map-image";
+import {registerSaves} from "./saves";
 import { createServer } from "node:http";
-import {
-  randomBytes,
-  scryptSync,
-  timingSafeEqual,
-  createHash,
-} from "node:crypto";
-import { promisify } from "node:util";
-import { scrypt } from "node:crypto";
+import {randomBytes,createHash} from "node:crypto";
 import path from "node:path";
 import cookieParser from "cookie-parser";
 import helmet from "helmet";
@@ -22,7 +16,7 @@ import { LocalStorage } from "./storage";
 import { id, newCampaign, viewFor } from "./state";
 import { act, events } from "./actions";
 import type { Campaign } from "../shared/types";
-const derive = promisify(scrypt);
+
 const hash = (s: string) => createHash("sha256").update(s).digest("hex");
 export function createApp(root = process.env.DATA_DIR || "data") {
   const store = openDatabase(root),
@@ -56,7 +50,7 @@ export function createApp(root = process.env.DATA_DIR || "data") {
     raw
       ? (store.db
           .prepare(
-            "SELECT users.id,users.username FROM sessions JOIN users ON users.id=sessions.user_id WHERE token=? AND expires>?",
+            "SELECT users.id,COALESCE(users.display_name,users.username) AS username FROM sessions JOIN users ON users.id=sessions.user_id WHERE token=? AND expires>?",
           )
           .get(hash(raw), Date.now()) as
           { id: string; username: string } | undefined)
@@ -66,7 +60,7 @@ export function createApp(root = process.env.DATA_DIR || "data") {
     next();
   });
   const auth = (req: any, res: any, next: any) =>
-    req.user ? next() : res.status(401).json({ error: "Please sign in" });
+    req.user ? next() : res.status(401).json({ error: "Enter a display name to join" });
   const member = (campaignId: string, userId: string) => {
     const c = store.get(campaignId);
     if (!c.members.some((m) => m.userId === userId))
@@ -88,68 +82,16 @@ export function createApp(root = process.env.DATA_DIR || "data") {
       if (socket.data.campaignId === c.id)
         socket.emit("state", viewFor(c, socket.data.user.id));
   }
-  const loginLimit = rateLimit({
-    windowMs: 15 * 60 * 1000,
-    limit: 30,
-    standardHeaders: true,
-    legacyHeaders: false,
+  app.post('/api/guest', rateLimit({windowMs:60000,limit:30}), (req:any,res)=>{
+    const name=z.string().trim().min(1).max(80).parse(req.body.name);
+    if(req.user)return res.json(req.user);
+    const userId=id(),token=randomBytes(32).toString('hex');
+    store.db.prepare('INSERT INTO users(id,username,password,display_name) VALUES(?,?,?,?)').run(userId,`guest-${userId}`,'',name);
+    store.db.prepare('INSERT INTO sessions VALUES(?,?,?)').run(hash(token),userId,Date.now()+30*86400000);
+    res.cookie('session',token,{httpOnly:true,sameSite:'strict',secure:process.env.COOKIE_SECURE==='true',maxAge:30*86400000,path:'/'}).json({id:userId,username:name});
   });
-  app.post("/api/auth/:mode", loginLimit, async (req, res, next) => {
-    try {
-      const p = z
-        .object({
-          username: z
-            .string()
-            .trim()
-            .regex(/^[a-zA-Z0-9_-]{3,32}$/),
-          password: z.string().min(8).max(128),
-        })
-        .parse(req.body);
-      const username = p.username.toLowerCase();
-      let user = store.db
-        .prepare("SELECT * FROM users WHERE username=?")
-        .get(username) as
-        { id: string; username: string; password: string } | undefined;
-      if (req.params.mode === "signup") {
-        if (user)
-          return res.status(409).json({ error: "Username already taken" });
-        const salt = randomBytes(16).toString("hex"),
-          digest = ((await derive(p.password, salt, 64)) as Buffer).toString(
-            "hex",
-          );
-        user = { id: id(), username, password: `${salt}:${digest}` };
-        store.db
-          .prepare("INSERT INTO users VALUES(?,?,?)")
-          .run(user.id, username, user.password);
-      } else if (req.params.mode === "login") {
-        const [salt, digest] = (
-          user?.password || `${"0".repeat(32)}:${"0".repeat(128)}`
-        ).split(":");
-        const supplied = (await derive(p.password, salt, 64)) as Buffer;
-        if (!user || !timingSafeEqual(supplied, Buffer.from(digest, "hex")))
-          return res
-            .status(401)
-            .json({ error: "Incorrect username or password" });
-      } else return res.status(404).json({ error: "Unknown auth action" });
-      const token = randomBytes(32).toString("hex"),
-        expires = Date.now() + 30 * 86400000;
-      store.db
-        .prepare("INSERT INTO sessions VALUES(?,?,?)")
-        .run(hash(token), user.id, expires);
-      res
-        .cookie("session", token, {
-          httpOnly: true,
-          sameSite: "strict",
-          secure: process.env.COOKIE_SECURE === "true",
-          maxAge: 30 * 86400000,
-          path: "/",
-        })
-        .json({ id: user.id, username });
-    } catch (e) {
-      next(e);
-    }
-  });
-  app.post("/api/logout", auth, (req: any, res) => {
+  app.post('/api/auth/:mode',(_req,res)=>res.status(410).json({error:'Accounts have been removed. Enter as a guest instead.'}));
+  app.post("/api/guest/leave", auth, (req: any, res) => {
     store.db
       .prepare("DELETE FROM sessions WHERE token=?")
       .run(hash(req.cookies.session));
@@ -290,39 +232,12 @@ export function createApp(root = process.env.DATA_DIR || "data") {
         map = c.maps.find((m) => m.id === req.params.map);
       if (!map || (!gm && map.id !== c.activeMapId))
         throw new Error("Map access denied");
-      const base = map.assetId
-        ? await storage.get(`${map.assetId}.webp`)
-        : await sharp(placeholder)
-            .resize(map.width, map.height)
-            .webp()
-            .toBuffer();
-      if (gm || !map.fog.length)
-        return res
-          .set("Cache-Control", "private, no-store")
-          .type("webp")
-          .send(base);
-      const paths = map.fog
-        .map(
-          (s) =>
-            `<path d="M ${s.points.map((p) => `${p.x} ${p.y}`).join(" L ")} l 0.01 0" fill="none" stroke="${s.erase ? "black" : "white"}" stroke-width="${s.size}" stroke-linecap="round" stroke-linejoin="round"/>`,
-        )
-        .join("");
-      const svg = Buffer.from(
-        `<svg width="${map.width}" height="${map.height}" xmlns="http://www.w3.org/2000/svg"><defs><mask id="fog"><rect width="100%" height="100%" fill="black"/>${paths}</mask></defs><rect width="100%" height="100%" fill="#080c12" mask="url(#fog)"/></svg>`,
-      );
-      res
-        .set("Cache-Control", "private, no-store")
-        .type("webp")
-        .send(
-          await sharp(base)
-            .composite([{ input: svg }])
-            .webp()
-            .toBuffer(),
-        );
+      res.set("Cache-Control","private, no-store").type('webp').send(await renderMap(map,storage,!gm));
     } catch (e) {
       next(e);
     }
   });
+  registerSaves(app,store,storage,auth,broadcast,io);
   io.use((socket, next) => {
     const raw = socket.request.headers.cookie
       ?.split(";")
@@ -330,7 +245,7 @@ export function createApp(root = process.env.DATA_DIR || "data") {
       .find((v) => v.startsWith("session="))
       ?.slice(8);
     const user = session(raw);
-    if (!user) return next(new Error("Please sign in"));
+    if (!user) return next(new Error("Enter a display name to join"));
     socket.data.user = user;
     socket.data.session = raw;
     next();
@@ -397,7 +312,7 @@ export function createApp(root = process.env.DATA_DIR || "data") {
           err instanceof z.ZodError
             ? "Invalid input"
             : err.code === "LIMIT_FILE_SIZE"
-              ? "Image must be 20 MB or smaller"
+              ? (_req.path === "/api/restore" || _req.path === "/api/join-save" ? "Save must be 128 MB or smaller" : "Image must be 20 MB or smaller")
               : err.message || "Request failed",
       }),
   );

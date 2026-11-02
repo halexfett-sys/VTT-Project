@@ -11,6 +11,8 @@ export function openDatabase(root: string) {
  CREATE TABLE IF NOT EXISTS campaigns(id TEXT PRIMARY KEY,name TEXT NOT NULL,invite TEXT UNIQUE NOT NULL,state TEXT NOT NULL);
  CREATE TABLE IF NOT EXISTS memberships(campaign_id TEXT REFERENCES campaigns(id),user_id TEXT REFERENCES users(id),PRIMARY KEY(campaign_id,user_id));
  CREATE TABLE IF NOT EXISTS assets(id TEXT PRIMARY KEY,campaign_id TEXT REFERENCES campaigns(id),owner_id TEXT REFERENCES users(id),filename TEXT NOT NULL);`);
+  if (!(db.prepare("PRAGMA table_info(users)").all() as {name:string}[]).some(c=>c.name==='display_name')) db.exec('ALTER TABLE users ADD COLUMN display_name TEXT');
+  db.exec('CREATE TABLE IF NOT EXISTS save_keys(campaign_id TEXT NOT NULL,user_id TEXT NOT NULL,hash TEXT NOT NULL,PRIMARY KEY(campaign_id,hash))');
   return {
     db,
     get(id: string) {

@@ -8,7 +8,7 @@ import sharp from "sharp";
 import { createApp } from "../server/app";
 import { act } from "../server/actions";
 import { newCampaign, viewFor, obscured } from "../server/state";
-test("ordered multiplayer workflow: accounts, maps, tokens, art, tools, chat, persistence", async () => {
+test("ordered multiplayer workflow: guests, maps, tokens, art, tools, chat, persistence", async () => {
   const dir = await mkdtemp(path.join(os.tmpdir(), "vtt-"));
   const server = createApp(dir);
   await new Promise<void>((r) => server.http.listen(0, "127.0.0.1", r));
@@ -28,24 +28,24 @@ test("ordered multiplayer workflow: accounts, maps, tokens, art, tools, chat, pe
         cookie: response.headers.get("set-cookie")?.split(";")[0] || cookie,
       };
     };
-    const gm = await api("/api/auth/signup", {
-      username: "captain",
+    const gm = await api("/api/guest", {
+      name: "captain",
       password: "test-password-123",
     });
     assert.equal(gm.response.status, 200);
-    const player = await api("/api/auth/signup", {
-      username: "pilot",
+    const player = await api("/api/guest", {
+      name: "pilot",
       password: "test-password-123",
     });
     assert.equal(player.response.status, 200);
     assert.equal(
       (
         await api("/api/auth/login", {
-          username: "pilot",
+          name: "pilot",
           password: "wrong-password",
         })
       ).response.status,
-      401,
+      410,
     );
     const created = await api(
         "/api/rooms",
