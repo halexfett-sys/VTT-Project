@@ -146,7 +146,7 @@ export default function App() {
     const s = io({
       autoConnect: false,
       ...(cloudConfig.cloud
-        ? { path: cloudConfig.socketPath, transports: ["websocket"] }
+        ? { path: cloudConfig.socketPath, transports: ["websocket"], addTrailingSlash: false }
         : {}),
     });
     socket.current = s;

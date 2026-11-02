@@ -95,6 +95,7 @@ export function createCloudApp(
     };
   const io = new Server(http, {
     path: "/api/server/socket.io",
+    addTrailingSlash: false,
     transports: ["websocket"],
     maxHttpBufferSize: 262144,
     allowRequest: (req, done) =>

@@ -176,6 +176,7 @@ test("cloud API and two websocket instances share guests, campaigns, images and 
   const open = async (srv: any, cookie: string, room: string) => {
     const s = io(base(srv), {
       path: "/api/server/socket.io",
+    addTrailingSlash: false,
       transports: ["websocket"],
       extraHeaders: { cookie },
       forceNew: true,

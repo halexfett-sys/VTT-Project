@@ -44,7 +44,7 @@ Do not use a `VITE_` prefix for these names. Do not put the secret in GitHub. No
 
 ## Runtime behavior and limits
 
-- Socket.IO uses WebSocket-only transport at `/api/server/socket.io`. The client reconnects and rejoins after Vercel ends a function connection.
+- Socket.IO uses WebSocket-only transport at `/api/server/socket.io`, with `addTrailingSlash: false` on both client and server. The slash-free path avoids the deployed trailing-slash 404. The client reconnects and rejoins after Vercel ends a function connection.
 - Actions validate permissions on the server. Campaign writes use PostgreSQL compare-and-swap revisions. A conflicting action returns an error instead of overwriting another user's update; retry after the latest snapshot arrives.
 - Clients on the same instance receive immediate broadcasts. Across instances, each connected socket checks durable state once per second. This is a simple small-group implementation, not a high-scale pub/sub adapter. It consumes database reads and active-function time; monitor both providers' free usage limits. Token movement across instances can lag by about a second.
 - Images up to 20 MB and save files up to 128 MB upload in 2 MB chunks. Ownership is verified for every chunk and import. Chunk records expire after one hour; successfully consumed chunks are deleted. Failed/abandoned uploads can leave private chunks: remove expired transfer folders from the `vtt-transfers` bucket periodically. Do not delete `vtt-assets` when cleaning temporary transfers.
