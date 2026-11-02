@@ -1,12 +1,11 @@
+import { readApiResponse } from "./response";
 export async function api(path: string, body?: unknown) {
   const r = await fetch(`/api${path}`, {
     method: body ? "POST" : "GET",
     headers: body ? { "Content-Type": "application/json" } : undefined,
     body: body ? JSON.stringify(body) : undefined,
   });
-  const data = await r.json();
-  if (!r.ok) throw new Error(data.error || "Request failed");
-  return data;
+  return readApiResponse(r);
 }
 export const assetUrl = (room: string, id: string) =>
   `/api/rooms/${room}/assets/${id}`;
@@ -18,7 +17,5 @@ export async function upload(room: string, kind: string, file: File) {
     method: "POST",
     body: form,
   });
-  const data = await r.json();
-  if (!r.ok) throw new Error(data.error);
-  return data;
+  return readApiResponse(r);
 }

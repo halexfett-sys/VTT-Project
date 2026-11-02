@@ -294,6 +294,8 @@ export function createApp(root = process.env.DATA_DIR || "data") {
       });
   });
   app.get("/api/health", (_req, res) => res.json({ ok: true }));
+  // Unknown API paths must not fall through to the frontend HTML fallback.
+  app.use("/api", (_req, res) => res.status(404).json({ error: "API endpoint not found. Check that the client and server versions match." }));
   app.use(express.static(path.resolve("dist")));
   app.get("/{*path}", (_req, res) =>
     res.sendFile(path.resolve("dist/index.html")),
