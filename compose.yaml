@@ -1,0 +1,14 @@
+services:
+  vtt:
+    build: .
+    ports:
+      - "3001:3001"
+    volumes:
+      - vtt-data:/app/data
+    environment:
+      PORT: "3001"
+      DATA_DIR: /app/data
+      COOKIE_SECURE: "false"
+    restart: unless-stopped
+volumes:
+  vtt-data:
