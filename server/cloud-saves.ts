@@ -4,12 +4,12 @@ import multer from "multer";
 import sharp from "sharp";
 import { randomBytes, createHash } from "node:crypto";
 import { rateLimit } from "express-rate-limit";
-import { saveSchema, type SaveFile } from "./save-schema";
-import type { CloudStore } from "./cloud-db";
-import type { Storage } from "./storage";
-import type { Campaign, Asset } from "../shared/types";
-import { id, newCampaign, viewFor } from "./state";
-import { renderMap } from "./map-image";
+import { saveSchema, type SaveFile } from "./save-schema.js";
+import type { CloudStore } from "./cloud-db.js";
+import type { Storage } from "./storage.js";
+import type { Campaign, Asset } from "../shared/types.js";
+import { id, newCampaign, viewFor } from "./state.js";
+import { renderMap } from "./map-image.js";
 const hash = (s: string) => createHash("sha256").update(s).digest("hex");
 const MAX = 128 * 1024 * 1024;
 function checkReferences(file: SaveFile) {

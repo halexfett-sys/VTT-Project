@@ -1,7 +1,7 @@
 import sharp from 'sharp';
-import {placeholder} from './placeholder';
-import type {MapScene} from '../shared/types';
-import type {Storage} from './storage';
+import {placeholder} from './placeholder.js';
+import type {MapScene} from '../shared/types.js';
+import type {Storage} from './storage.js';
 export async function renderMap(map:MapScene,storage:Storage,masked:boolean){
  const base=map.assetId?await storage.get(`${map.assetId}.webp`):await sharp(placeholder).resize(map.width,map.height).webp().toBuffer();
  if(!masked||!map.fog.length)return base;

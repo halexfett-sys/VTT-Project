@@ -1,8 +1,8 @@
 import { randomInt } from "node:crypto";
 import { z } from "zod";
-import { rollPool } from "../shared/dice";
-import { defaultSheet, type Campaign, type Token } from "../shared/types";
-import { canEdit, id, newMap } from "./state";
+import { rollPool } from "../shared/dice.js";
+import { defaultSheet, type Campaign, type Token } from "../shared/types.js";
+import { canEdit, id, newMap } from "./state.js";
 const num = z.number().finite(),
   coord = num.min(0).max(20000),
   color = z.string().regex(/^#[0-9a-f]{6}$/i),

@@ -1,4 +1,4 @@
-import type { Die, Pool, Roll, Symbols } from "./types";
+import type { Die, Pool, Roll, Symbols } from "./types.js";
 const zero = (): Symbols => ({
   success: 0,
   failure: 0,

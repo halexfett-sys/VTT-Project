@@ -1,6 +1,6 @@
 import express from "express";
-import { renderMap } from "./map-image";
-import {registerSaves} from "./saves";
+import { renderMap } from "./map-image.js";
+import {registerSaves} from "./saves.js";
 import { createServer } from "node:http";
 import {randomBytes,createHash} from "node:crypto";
 import path from "node:path";
@@ -11,11 +11,11 @@ import multer from "multer";
 import sharp from "sharp";
 import { Server } from "socket.io";
 import { z } from "zod";
-import { openDatabase } from "./db";
-import { LocalStorage } from "./storage";
-import { id, newCampaign, viewFor } from "./state";
-import { act, events } from "./actions";
-import type { Campaign } from "../shared/types";
+import { openDatabase } from "./db.js";
+import { LocalStorage } from "./storage.js";
+import { id, newCampaign, viewFor } from "./state.js";
+import { act, events } from "./actions.js";
+import type { Campaign } from "../shared/types.js";
 
 const hash = (s: string) => createHash("sha256").update(s).digest("hex");
 export function createApp(root = process.env.DATA_DIR || "data") {

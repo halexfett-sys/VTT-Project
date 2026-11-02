@@ -1,6 +1,6 @@
-import { SupabaseTransport } from "./supabase";
-import { CloudCampaigns } from "./cloud-campaigns";
-import type { Campaign } from "../shared/types";
+import { SupabaseTransport } from "./supabase.js";
+import { CloudCampaigns } from "./cloud-campaigns.js";
+import type { Campaign } from "../shared/types.js";
 export class CloudStore extends CloudCampaigns {
   constructor(public transport: SupabaseTransport) {
     super(transport);

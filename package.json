@@ -10,7 +10,8 @@
     "dev": "concurrently -k \"tsx watch server/index.ts\" \"vite --host 0.0.0.0\"",
     "build": "tsc --noEmit && vite build",
     "start": "tsx server/index.ts",
-    "test": "tsx --test tests/*.test.ts"
+    "test": "tsx --test tests/*.test.ts",
+    "check:server": "node scripts/check-server.mjs"
   },
   "dependencies": {
     "cookie-parser": "^1.4.7",

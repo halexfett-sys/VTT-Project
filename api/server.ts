@@ -1,4 +1,4 @@
-import { createCloudApp } from "../server/cloud-app";
+import { createCloudApp } from "../server/cloud-app.js";
 import { createServer } from "node:http";
 // Export the HTTP server so Vercel can serve HTTP and WebSocket upgrades.
 let server;

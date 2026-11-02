@@ -1,5 +1,5 @@
-import type { Storage } from "./storage";
-import { SupabaseTransport } from "./supabase";
+import type { Storage } from "./storage.js";
+import { SupabaseTransport } from "./supabase.js";
 export class CloudStorage implements Storage {
   constructor(
     private transport: SupabaseTransport,

@@ -7,15 +7,15 @@ import { createHash, randomBytes } from "node:crypto";
 import { Server } from "socket.io";
 import { z } from "zod";
 import sharp from "sharp";
-import { SupabaseTransport } from "./supabase";
-import { CloudStore } from "./cloud-db";
-import { CloudStorage } from "./cloud-storage";
-import { RevisionConflict } from "./cloud-campaigns";
-import { act, events } from "./actions";
-import { id, newCampaign, viewFor } from "./state";
-import { renderMap } from "./map-image";
-import { registerCloudSaves } from "./cloud-saves";
-import type { Campaign } from "../shared/types";
+import { SupabaseTransport } from "./supabase.js";
+import { CloudStore } from "./cloud-db.js";
+import { CloudStorage } from "./cloud-storage.js";
+import { RevisionConflict } from "./cloud-campaigns.js";
+import { act, events } from "./actions.js";
+import { id, newCampaign, viewFor } from "./state.js";
+import { renderMap } from "./map-image.js";
+import { registerCloudSaves } from "./cloud-saves.js";
+import type { Campaign } from "../shared/types.js";
 const hash = (s: string) => createHash("sha256").update(s).digest("hex");
 const cookie = (raw?: string) =>
   raw

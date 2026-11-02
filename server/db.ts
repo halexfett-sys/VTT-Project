@@ -1,7 +1,7 @@
 import { DatabaseSync } from "node:sqlite";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
-import type { Campaign } from "../shared/types";
+import type { Campaign } from "../shared/types.js";
 export function openDatabase(root: string) {
   mkdirSync(root, { recursive: true });
   const db = new DatabaseSync(path.join(root, "tabletop.sqlite"));

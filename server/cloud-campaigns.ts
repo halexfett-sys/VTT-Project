@@ -1,5 +1,5 @@
-import type { Campaign } from "../shared/types";
-import { SupabaseTransport } from "./supabase";
+import type { Campaign } from "../shared/types.js";
+import { SupabaseTransport } from "./supabase.js";
 export class RevisionConflict extends Error {
   constructor() {
     super(

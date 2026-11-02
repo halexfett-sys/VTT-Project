@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { Campaign, MapScene, Point, Token } from "../shared/types";
+import type { Campaign, MapScene, Point, Token } from "../shared/types.js";
 export const id = () => randomUUID();
 export function newMap(name = "Uncharted landing zone"): MapScene {
   return {
