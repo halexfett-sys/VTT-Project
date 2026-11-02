@@ -2,6 +2,10 @@
 
 A React + TypeScript virtual tabletop for the FFG Star Wars narrative dice system (Edge of the Empire, Age of Rebellion, and Force and Destiny). Unofficial and independent. The dice and result images in `public/dice/` are supplied by the user; no map artwork, logos, fonts, or rules prose are bundled. The landing-zone schematic is original SVG geometry rendered on the server; upload your own art.
 
+## Vercel + Supabase deployment
+
+For the hosted version, follow [the step-by-step Vercel setup guide](docs/deployment/VERCEL-SETUP.md). It includes both SQL migrations, environment variables, GitHub upload instructions and live verification. The cloud backend is separate from the local SQLite server.
+
 ## Quick start
 
 Requires **Node.js 24.x** (uses built-in SQLite) and npm.
@@ -62,7 +66,7 @@ Images are embedded, so files work on another installation. Keep player files pr
 
 Export after each session and before clearing cookies or changing hosts. Files are manual snapshots; later changes are not included automatically. Campaign files include the last 500 retained chat/roll messages, not unbounded history. Imports accept version-1 `.json` files up to 128 MB, with at most 90 MB of decoded embedded image data (20 MB per image). Images are checked and re-encoded on import. Large libraries may need pruning before export.
 
-**Live multiplayer still requires the Express/Socket.IO server.** Save files provide portable backups; removing accounts does not turn this into a static-only Vercel app or replace the live backend. Local hosting with Node or Docker remains supported.
+**Live multiplayer still requires a backend.** The Vercel deployment now includes a cloud Express/Socket.IO backend using Supabase, while local Node/Docker hosting retains SQLite. Save files provide portable backups in both modes.
 
 ## Architecture
 

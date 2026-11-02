@@ -99,6 +99,7 @@ export function createApp(root = process.env.DATA_DIR || "data") {
       if (s.data.session === req.cookies.session) s.disconnect(true);
     res.clearCookie("session").json({ ok: true });
   });
+  app.get("/api/config", (_req,res)=>res.json({cloud:false}));
   app.get("/api/me", (req: any, res) => res.json(req.user || null));
   app.get("/api/rooms", auth, (req: any, res) =>
     res.json(

@@ -92,3 +92,9 @@ Token appearance is optional for backwards compatibility: `{background, textColo
 - `POST /api/join-save`: multipart `file` (player) plus `code` (invite), or `roomId` for an existing member. Restores profile/tokens and broadcasts authoritative state. Role is never taken from the file. A matching secret can reclaim a player membership and disconnect the old participant.
 
 Version 1 envelope: `{format:"outer-rim-save",version:1,kind,exportedAt,files:[{id,data:base64}]}`. Player payload: `{profile,tokens,assets,resumeKey}`. Campaign/table payload: `{campaign,exporterId,claims:[{memberId,hash}]}`. Only GM campaign exports include recovery claim hashes. The `save_keys` table stores `(campaign_id,user_id,hash)` with primary key `(campaign_id,hash)`. No session cookies or password digests are exported. Shared save validation lives in `server/save-schema.ts`; image references, ownership and decoded contents are checked before campaign changes.
+
+## Vercel cloud transport
+
+Cloud HTTP routes match the local routes. `GET /api/config` returns `{cloud:true,socketPath:"/api/server/socket.io"}`; local returns `{cloud:false}`. The cloud client uses WebSocket-only Socket.IO at that path. Shared state is committed with revision compare-and-swap and polled across instances once per second. Conflicts return an action error or HTTP 409; clients should observe refreshed state before retrying.
+
+Cloud uploads first call `POST /api/transfers` with `{size,name,type:"image"|"save"}`. The response supplies `{id,chunkSize}`. Upload each chunk with `PUT /api/transfers/:id/:part` as `application/octet-stream`, then POST `{transfer:id,...fields}` to the usual asset/save route. Each request validates guest ownership. Cloud downloads stream content to avoid buffering it into a single platform response payload. See the deployment guide for quotas and expired-transfer cleanup.

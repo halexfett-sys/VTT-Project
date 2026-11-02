@@ -1,3 +1,4 @@
+import { serverConfig } from "./runtime";
 import { useEffect, useRef, useState } from "react";
 import { io, type Socket } from "socket.io-client";
 import type {
@@ -82,6 +83,10 @@ export default function App() {
       null,
     ),
     [ready, setReady] = useState(false),
+    [cloudConfig, setCloudConfig] = useState<{
+      cloud: boolean;
+      socketPath?: string;
+    }>({ cloud: false }),
     [error, setError] = useState(""),
     [saveOpen, setSaveOpen] = useState(false),
     [joinFile, setJoinFile] = useState<File | null>(null),
@@ -119,8 +124,11 @@ export default function App() {
     }
   };
   useEffect(() => {
-    api("/me")
-      .then(setUser)
+    Promise.all([api("/me"), serverConfig()])
+      .then(([u, c]) => {
+        setUser(u);
+        setCloudConfig(c);
+      })
       .catch((e) => setError(e.message))
       .finally(() => setReady(true));
   }, []);
@@ -135,7 +143,12 @@ export default function App() {
       setState(null);
       return;
     }
-    const s = io({ autoConnect: false });
+    const s = io({
+      autoConnect: false,
+      ...(cloudConfig.cloud
+        ? { path: cloudConfig.socketPath, transports: ["websocket"] }
+        : {}),
+    });
     socket.current = s;
     s.on("connect", () => {
       s.emit("room:join", { roomId: room }, (r: any) => {
@@ -152,7 +165,7 @@ export default function App() {
       socket.current = null;
       setConnected(false);
     };
-  }, [room, user]);
+  }, [room, user, cloudConfig]);
   useEffect(() => {
     chatEnd.current?.scrollIntoView({ behavior: "smooth" });
   }, [state?.messages.length, tab]);
@@ -237,12 +250,36 @@ export default function App() {
               <span>↗ Real-time play</span>
             </div>
           </section>
-          <form className="auth-card" onSubmit={e => {e.preventDefault(); const f=new FormData(e.currentTarget); run(async()=>setUser(await api('/guest',{name:f.get('name')})));}}>
-            <div className="eyebrow">ESTABLISH CONNECTION</div><h2>Welcome aboard.</h2>
-            <p>Enter a display name to host or join. No account or password needed.</p>
-            <Field label="Display name"><input name="name" required maxLength={80} placeholder="Your callsign" autoComplete="nickname" /></Field>
+          <form
+            className="auth-card"
+            onSubmit={(e) => {
+              e.preventDefault();
+              const f = new FormData(e.currentTarget);
+              run(async () =>
+                setUser(await api("/guest", { name: f.get("name") })),
+              );
+            }}
+          >
+            <div className="eyebrow">ESTABLISH CONNECTION</div>
+            <h2>Welcome aboard.</h2>
+            <p>
+              Enter a display name to host or join. No account or password
+              needed.
+            </p>
+            <Field label="Display name">
+              <input
+                name="name"
+                required
+                maxLength={80}
+                placeholder="Your callsign"
+                autoComplete="nickname"
+              />
+            </Field>
             <button className="primary full">Enter tabletop ↗</button>
-            <p>Your browser remembers you. Export saves to keep your campaign and characters when switching devices or clearing browser data.</p>
+            <p>
+              Your browser remembers you. Export saves to keep your campaign and
+              characters when switching devices or clearing browser data.
+            </p>
           </form>
         </main>
         {toast}
@@ -317,14 +354,48 @@ export default function App() {
                 />
                 <button className="primary">+ Create campaign</button>
               </form>
-              <section className="panel"><h3>Restore a table</h3><p>Upload a campaign or visible-table save to create a new table. Existing tables stay intact.</p><input aria-label="Restore table save" type="file" accept=".json,application/json" disabled={busy} onChange={e=>{const file=e.target.files?.[0];e.target.value='';if(file)run(async()=>{setBusy(true);try{enter((await importSave('/restore',file)).id);}finally{setBusy(false);}});}} /></section>
+              <section className="panel">
+                <h3>Restore a table</h3>
+                <p>
+                  Upload a campaign or visible-table save to create a new table.
+                  Existing tables stay intact.
+                </p>
+                <input
+                  aria-label="Restore table save"
+                  type="file"
+                  accept=".json,application/json"
+                  disabled={busy}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    e.target.value = "";
+                    if (file)
+                      run(async () => {
+                        setBusy(true);
+                        try {
+                          enter((await importSave("/restore", file)).id);
+                        } finally {
+                          setBusy(false);
+                        }
+                      });
+                  }}
+                />
+              </section>
             </section>
             <form
               className="panel join-card"
               onSubmit={(e) => {
                 e.preventDefault();
                 const data = Object.fromEntries(new FormData(e.currentTarget));
-                run(async () => enter((joinFile ? await importSave('/join-save', joinFile, {code:String(data.code)}) : await api('/join',data)).id));
+                run(async () =>
+                  enter(
+                    (joinFile
+                      ? await importSave("/join-save", joinFile, {
+                          code: String(data.code),
+                        })
+                      : await api("/join", data)
+                    ).id,
+                  ),
+                );
               }}
             >
               <span className="eyebrow">HAVE AN INVITATION?</span>
@@ -350,9 +421,20 @@ export default function App() {
               <Field label="Your token color">
                 <input name="color" type="color" defaultValue="#65c8c3" />
               </Field>
-              <Field label="Player save (optional)"><input type="file" accept=".json,application/json" onChange={e=>setJoinFile(e.target.files?.[0] || null)} /></Field>
-              <p className="muted">A player save restores your saved name, color, portrait, art, tokens, and sheets. Keep the file private.</p>
-              <button className="primary full">{joinFile ? 'Join with player save ↗' : 'Join campaign ↗'}</button>
+              <Field label="Player save (optional)">
+                <input
+                  type="file"
+                  accept=".json,application/json"
+                  onChange={(e) => setJoinFile(e.target.files?.[0] || null)}
+                />
+              </Field>
+              <p className="muted">
+                A player save restores your saved name, color, portrait, art,
+                tokens, and sheets. Keep the file private.
+              </p>
+              <button className="primary full">
+                {joinFile ? "Join with player save ↗" : "Join campaign ↗"}
+              </button>
             </form>
           </div>
         </main>
@@ -1400,7 +1482,17 @@ export default function App() {
           </section>
         </div>
       )}
-      {saveOpen && <SaveTools room={room} gm={gm} close={()=>setSaveOpen(false)} restored={()=>{setSelected("");setSaveOpen(false);}} />}
+      {saveOpen && (
+        <SaveTools
+          room={room}
+          gm={gm}
+          close={() => setSaveOpen(false)}
+          restored={() => {
+            setSelected("");
+            setSaveOpen(false);
+          }}
+        />
+      )}
       {inviteOpen && (
         <div className="modal-backdrop">
           <section className="modal">
@@ -1409,7 +1501,10 @@ export default function App() {
             </button>
             <div className="eyebrow">EXPAND YOUR CREW</div>
             <h2>Invite to campaign</h2>
-            <p>Players enter a display name, then join with this invite and an optional player save.</p>
+            <p>
+              Players enter a display name, then join with this invite and an
+              optional player save.
+            </p>
             <Field label="Invite link">
               <input
                 readOnly
