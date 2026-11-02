@@ -18,7 +18,7 @@ export class SupabaseTransport {
     const response = await this.request(`${this.url}${path}`, {
       ...init,
       headers,
-      signal: AbortSignal.timeout(30000),
+      signal: AbortSignal.timeout(path.startsWith("/rest/") ? 8000 : 30000),
     });
     if (!response.ok)
       throw new Error(`Cloud storage request failed (HTTP ${response.status})`);

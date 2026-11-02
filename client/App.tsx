@@ -1,3 +1,4 @@
+import {ActionQueue} from "./action-queue";
 import { serverConfig } from "./runtime";
 import { useEffect, useRef, useState } from "react";
 import { io, type Socket } from "socket.io-client";
@@ -113,6 +114,7 @@ export default function App() {
   const [sceneSelection, setSceneSelection] = useState<string[]>([]);
   const [confirmScenes, setConfirmScenes] = useState(false);
   const [deletingScenes, setDeletingScenes] = useState(false);
+  const actions = useRef<ActionQueue | null>(null);
   const socket = useRef<Socket | null>(null),
     chatEnd = useRef<HTMLDivElement>(null);
   const run = async (fn: () => Promise<void>) => {
@@ -150,17 +152,29 @@ export default function App() {
         : {}),
     });
     socket.current = s;
+    const makeQueue = () => new ActionQueue((event,payload,done)=>{
+      s.timeout(cloudConfig.cloud?30000:5000).emit(event,payload,(err:any,res:any)=>{
+        if(err) {
+          setError(`No response to ${event}. Reconnecting to refresh the table; check the result before retrying.`);
+          actions.current?.close();
+          s.disconnect();s.connect();
+        } else if(res?.error) setError(res.error);
+        done(!err&&!res?.error);
+      });
+    });
     s.on("connect", () => {
+      actions.current?.close();actions.current=makeQueue();
       s.emit("room:join", { roomId: room }, (r: any) => {
         if (r.error) setError(r.error);
         else setConnected(true);
       });
     });
-    s.on("disconnect", () => setConnected(false));
+    s.on("disconnect", () => {setConnected(false);actions.current?.close();});
     s.on("connect_error", (e) => setError(e.message));
     s.on("state", (c: Campaign) => setState(c));
     s.connect();
     return () => {
+      actions.current?.close();actions.current=null;
       s.disconnect();
       socket.current = null;
       setConnected(false);
@@ -179,14 +193,7 @@ export default function App() {
       setError("Connection lost. Wait for reconnection before making changes.");
       return;
     }
-    socket.current.timeout(5000).emit(event, payload, (err: any, res: any) => {
-      if (err)
-        setError(
-          "Action acknowledgement timed out. Check the shared state before retrying.",
-        );
-      else if (res?.error) setError(res.error);
-      complete?.(!err && !res?.error);
-    });
+    actions.current?.push(event,payload,complete);
   };
   const enter = (id: string) => {
     setRoom(id);
