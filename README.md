@@ -106,3 +106,13 @@ Numerical dice behavior was checked against the publisher's [dice overview](http
 The current local preview uses `.tools/qa-data` for its persistent database and uploads, selected in the ignored `.env` file. Keep that directory: it includes the campaign and map added during preview. Running `npm start` here uses that same data. A fresh checkout without `.env` uses `data/`. Neither directory is included in Docker images or source control.
 
 On Windows, after installing dependencies, `./Start-VTT.ps1` also launches the app (and builds it if needed), without requiring npm on the runtime PATH.
+
+## Vercel build warnings and deployment scope
+
+The Node engine is pinned to `24.x`, and `package.json.allowScripts` explicitly permits the installed `esbuild@0.28.2` postinstall step. Revisit that version-specific approval when updating esbuild. On newer npm, `npm install-scripts ls` lists scripts needing review. Do not enable all dependency scripts just to silence a warning.
+
+An `Unknown env config "cache-dir"` warning is not configured by this repository. If your deployment settings inject `NPM_CONFIG_CACHE_DIR` (or `npm_config_cache_dir`), remove it; npm's supported cache location setting is `NPM_CONFIG_CACHE`. A warning by itself does not establish a failed build: inspect subsequent error lines and the final exit status.
+
+The current backend requires a single long-running Node server and durable disk storage for SQLite and uploaded images. A Vite frontend-only deployment on Vercel does not deploy or route this backend automatically. Vercel Functions have ephemeral storage, so moving the SQLite database into `/tmp` is not a persistence fix. Vercel now supports WebSockets in public beta, but a full migration still requires external database/object storage, a Vercel-compatible server entry point, and cross-instance synchronization. The supplied Docker setup on a host with a persistent volume retains the current architecture.
+
+References: [Node versions](https://vercel.com/docs/functions/runtimes/node-js/node-js-versions), [npm script approvals](https://docs.npmjs.com/cli/v11/commands/npm-install-scripts/), [Vercel SQLite storage limitations](https://vercel.com/kb/guide/is-sqlite-supported-in-vercel), [WebSocket public beta](https://vercel.com/changelog/websocket-support-is-now-in-public-beta).
