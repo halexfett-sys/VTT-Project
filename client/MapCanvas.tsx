@@ -7,6 +7,7 @@ type Props = {
   userId: string;
   tool: Tool;
   brush: number;
+  rangeBase: number;
   selected: string;
   onSelect: (id: string) => void;
   send: (event: string, payload: unknown) => void;
@@ -17,6 +18,7 @@ export default function MapCanvas({
   userId,
   tool,
   brush,
+  rangeBase,
   selected,
   onSelect,
   send,
@@ -29,6 +31,7 @@ export default function MapCanvas({
       userId,
       tool,
       brush,
+  rangeBase,
       selected,
       onSelect,
       send,
@@ -39,6 +42,7 @@ export default function MapCanvas({
     userId,
     tool,
     brush,
+  rangeBase,
     selected,
     onSelect,
     send,
@@ -64,10 +68,11 @@ export default function MapCanvas({
   const mapImage = useRef<HTMLImageElement | null>(null),
     imageKey = useRef("");
   // Reload only when map/fog changes, not for chat or token motion. Players receive a fog signature.
-  const signature = `${map.id}:${map.fogRevision ?? map.fog.map((s) => s.id).join(",")}:${map.assetId || ""}`;
+  const signature = `${map.id}:${map.fogRevision ?? map.fog.map((s) => s.id).join(",")}:${map.assetId || map.hasImage || ""}`;
   useEffect(() => {
     mapImage.current = null;
     imageKey.current = signature;
+    if (!map.assetId && !map.hasImage) return;
     const img = new Image();
     img.onload = () => {
       if (imageKey.current === signature) mapImage.current = img;
@@ -240,7 +245,7 @@ export default function MapCanvas({
           ctx.drawImage(art, -w / 2, -h / 2, w, h);
         } else {
           ctx.fillStyle = t.appearance?.textColor || owner?.color || "#9ab3bc";
-          ctx.font = `bold ${size * 0.38}px system-ui`;
+          ctx.font = `bold ${size * 0.38}px SWEuro, sans-serif`;
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";
           ctx.fillText(t.name.slice(0, 2).toUpperCase(), 0, 0);
@@ -259,7 +264,7 @@ export default function MapCanvas({
           ctx.stroke();
         }
         ctx.restore();
-        ctx.font = `${14 / cam.zoom}px system-ui`;
+        ctx.font = `${14 / cam.zoom}px SWEuro, sans-serif`;
         ctx.textAlign = "center";
         ctx.fillStyle = "#e6edf0";
         ctx.fillText(t.name, p.x, p.y + size / 2 + 18 / cam.zoom);
@@ -281,7 +286,7 @@ export default function MapCanvas({
         ctx.lineTo(ruler.b.x, ruler.b.y);
         ctx.stroke();
         ctx.setLineDash([]);
-        ctx.font = `${15 / cam.zoom}px system-ui`;
+        ctx.font = `${15 / cam.zoom}px SWEuro, sans-serif`;
         ctx.textAlign = "left";
         ctx.fillText(
           `${dist.toFixed(1)} grid units`,
@@ -291,7 +296,7 @@ export default function MapCanvas({
         if (current.current.tool === "range") {
           ["Engaged", "Short", "Medium", "Long", "Extreme"].forEach(
             (name, i) => {
-              const radius = [1, 3, 6, 10, 15][i] * g.size;
+              const radius = [1, 3, 6, 10, 15][i] * current.current.rangeBase;
               ctx.globalAlpha = 0.4;
               ctx.beginPath();
               ctx.arc(ruler.a.x, ruler.a.y, radius, 0, Math.PI * 2);
@@ -497,6 +502,7 @@ export default function MapCanvas({
           finish();
         }}
       />
+      {!map.assetId && !map.hasImage && <div className="no-map-data" role="status">No Map Data...</div>}
       <div className="map-caption">
         <span className="live-dot" /> {map.name}
         <small>

@@ -104,6 +104,7 @@ export default function App() {
     [leftTab, setLeftTab] = useState("scenes"),
     [pool, setPool] = useState<Pool>({}),
     [brush, setBrush] = useState(160),
+    [rangeBase,setRangeBase] = useState(64),
     [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(
       null,
     ),
@@ -230,12 +231,12 @@ export default function App() {
       <div className="auth-page">
         <div className="starfield" />
         <header className="brand">
-          <span className="brand-icon">◈</span> OUTER RIM{" "}
+          <span className="brand-icon">◈</span> ARCHIVE{" "}
           <small>VIRTUAL TABLETOP</small>
         </header>
         <main className="auth-layout">
           <section className="auth-intro">
-            <div className="eyebrow">YOUR CREW. YOUR GALAXY.</div>
+            <div className="eyebrow">YOUR CREW. YOUR GALAXY.</div><div className="aurebesh-trim" aria-hidden="true">Archive uplink online</div>
             <h1>
               Every great story
               <br />
@@ -297,7 +298,7 @@ export default function App() {
       <div className="lobby">
         <header className="topbar">
           <div className="brand">
-            <span className="brand-icon">◈</span> OUTER RIM{" "}
+            <span className="brand-icon">◈</span> ARCHIVE{" "}
             <small>CAMPAIGN CONTROL</small>
           </div>
           <div className="row">
@@ -362,7 +363,7 @@ export default function App() {
                 <button className="primary">+ Create campaign</button>
               </form>
               <section className="panel">
-                <h3>Restore a table</h3>
+                <h3>Import table data</h3>
                 <p>
                   Upload a campaign or visible-table save to create a new table.
                   Existing tables stay intact.
@@ -472,7 +473,7 @@ export default function App() {
         <button className="brand brand-button" onClick={leave}>
           <span className="brand-icon">◈</span>
           <span>
-            OUTER RIM<small>VIRTUAL TABLETOP</small>
+            ARCHIVE<small>VIRTUAL TABLETOP</small>
           </span>
         </button>
         <div className="campaign-title">
@@ -488,7 +489,7 @@ export default function App() {
             <i />
             {connected ? "Session live" : "Reconnecting"}
           </span>
-          <button onClick={() => setSaveOpen(true)}>Save / export</button>
+          <button onClick={() => setSaveOpen(true)}>Save / import / export</button>
           {gm && (
             <button onClick={() => setInviteOpen(true)}>↗ Invite crew</button>
           )}
@@ -667,6 +668,7 @@ export default function App() {
                 <h3>On this scene</h3>
                 <span>{visibleTokens.length}</span>
               </div>
+              <p className="muted">Select a token to rename, customize, or delete it. Players can edit their own tokens; the GM can edit any token.</p>
               {visibleTokens.map((t) => (
                 <button
                   key={t.id}
@@ -903,9 +905,10 @@ export default function App() {
                 ? "RANGE BANDS"
                 : tool.toUpperCase()}
           </span>
+          {tool === "range" && <label className="range-base">Base radius (map px)<input aria-label="Range band base radius" type="number" min={8} max={2000} value={rangeBase} onChange={e=>setRangeBase(Math.max(8,Math.min(2000,Number(e.target.value)||8)))} /></label>}
           {token && (
             <button className="inspect" onClick={() => setSheetOpen(true)}>
-              ◈ {token.name} · Inspect
+              ◈ {token.name} · Rename / edit
             </button>
           )}
         </div>
@@ -914,6 +917,7 @@ export default function App() {
           userId={user.id}
           tool={tool}
           brush={brush}
+          rangeBase={rangeBase}
           selected={selected}
           onSelect={setSelected}
           send={send}
@@ -1249,7 +1253,7 @@ export default function App() {
       </aside>
       <footer className="statusbar">
         <span>
-          ◈ OUTER RIM <b>TABLETOP</b>
+          ◈ ARCHIVE <b>TABLETOP</b>
         </span>
         <span>
           SERVER SYNC <i /> REV {state.revision.toString().padStart(4, "0")}
@@ -1279,8 +1283,8 @@ export default function App() {
               {String(label)}
             </button>
           ))}
-          <button onClick={() => setSheetOpen(true)}>
-            Set status / edit sheet
+          <button onClick={() => {setSelected(menu.id);setSheetOpen(true);}}>
+            Rename / edit token
           </button>
         </div>
       )}
@@ -1493,6 +1497,7 @@ export default function App() {
         <SaveTools
           room={room}
           gm={gm}
+          imported={id=>{setSaveOpen(false);enter(id);}}
           close={() => setSaveOpen(false)}
           restored={() => {
             setSelected("");

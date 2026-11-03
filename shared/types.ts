@@ -48,6 +48,7 @@ export type MapScene = {
   grid: Grid;
   fog: Fog[];
   fogRevision?: string;
+  hasImage?: boolean;
 };
 export type Sheet = {
   wounds: number;

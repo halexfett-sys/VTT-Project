@@ -1,4 +1,4 @@
-# Outer Rim — browser virtual tabletop
+# Archive Virtual Tabletop
 
 A React + TypeScript virtual tabletop for the FFG Star Wars narrative dice system (Edge of the Empire, Age of Rebellion, and Force and Destiny). Unofficial and independent. The dice and result images in `public/dice/` are supplied by the user; no map artwork, logos, fonts, or rules prose are bundled. The landing-zone schematic is original SVG geometry rendered on the server; upload your own art.
 
@@ -137,3 +137,7 @@ An `Unknown env config "cache-dir"` warning is not configured by this repository
 The current backend requires a single long-running Node server and durable disk storage for SQLite and uploaded images. A Vite frontend-only deployment on Vercel does not deploy or route this backend automatically. Vercel Functions have ephemeral storage, so moving the SQLite database into `/tmp` is not a persistence fix. Vercel now supports WebSockets in public beta, but a full migration still requires external database/object storage, a Vercel-compatible server entry point, and cross-instance synchronization. The supplied Docker setup on a host with a persistent volume retains the current architecture.
 
 References: [Node versions](https://vercel.com/docs/functions/runtimes/node-js/node-js-versions), [npm script approvals](https://docs.npmjs.com/cli/v11/commands/npm-install-scripts/), [Vercel SQLite storage limitations](https://vercel.com/kb/guide/is-sqlite-supported-in-vercel), [WebSocket public beta](https://vercel.com/changelog/websocket-support-is-now-in-public-beta).
+
+## Interface customization
+
+The supplied SWEuroRegular font is used for readable interface text, Starjhol for headings, and Aurebesh only for decorative text marked hidden from assistive technology. Font assets are user-supplied in public/fonts. Blank scenes show “No Map Data...” until a map image is assigned. Range mode exposes a personal base-radius control in map pixels; ring multipliers are 1, 3, 6, 10 and 15. These are narrative guides. Select a placed token in the Tokens panel or use Rename / edit token from its context menu to change its name or delete it (owner/GM permissions apply). Save / import / export includes player imports and full-table imports; table imports create a new campaign.

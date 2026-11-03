@@ -349,8 +349,8 @@ small {
 }
 .orbital span {
   font:
-    48px ui-monospace,
-    monospace;
+    48px ui-SWEuro, sans-serif,
+    SWEuro, sans-serif;
   font-weight: 200;
 }
 .orbital small {
@@ -663,7 +663,7 @@ small {
   left: 10px;
   font-size: 10px;
   color: #aec1c6;
-  font-family: monospace;
+  font-family: SWEuro, sans-serif;
 }
 .scene-card strong {
   display: block;
@@ -1050,8 +1050,8 @@ small {
 }
 .dice-tray > div > span {
   font:
-    11px ui-monospace,
-    monospace;
+    11px ui-SWEuro, sans-serif,
+    SWEuro, sans-serif;
   color: #c0cbd3;
 }
 .die-minus {
@@ -1204,7 +1204,7 @@ small {
 }
 .slot > span:first-child {
   color: var(--gold);
-  font: 11px monospace;
+  font: 11px SWEuro, sans-serif;
 }
 .slot b {
   font-size: 11px;
@@ -1800,3 +1800,15 @@ small {
   color: #86dcb9 !important;
   margin-top: 10px;
 }
+
+@font-face {font-family:SWEuro;src:url('/fonts/SWEuroRegular.ttf') format('truetype');font-display:swap;}
+@font-face {font-family:Starjhol;src:url('/fonts/Starjhol.ttf') format('truetype');font-display:swap;}
+@font-face {font-family:Aurebesh;src:url('/fonts/Aurebesh.otf') format('opentype');font-display:swap;}
+:root, body, button, input, select, textarea {font-family:SWEuro,system-ui,sans-serif;}
+h1,h2,h3,.brand {font-family:Starjhol,SWEuro,sans-serif;letter-spacing:.04em;}
+.aurebesh-trim {font-family:Aurebesh,sans-serif;color:#68b9c4;opacity:.65;font-size:20px;letter-spacing:.2em;margin:16px 0;}
+.no-map-data {position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);pointer-events:none;color:#b8d5de;background:#101a24e8;padding:20px 30px;border:1px solid #425764;border-radius:8px;font-size:24px;}
+.range-base {display:flex;gap:8px;align-items:center;font-size:12px;}.range-base input {width:90px;padding:5px;}
+@media(max-width:900px){.range-base {flex-wrap:wrap;}.range-base input{width:70px;}}
+
+.lobby-main .panel {padding:18px;margin-top:18px;}

@@ -114,6 +114,7 @@ export function viewFor(c: Campaign, userId: string): Campaign {
       .filter((m) => m.id === c.activeMapId)
       .map((m) => ({
         ...m,
+        hasImage: Boolean(m.assetId),
         assetId: undefined,
         fog: [],
         fogRevision: m.fog.map((s) => s.id).join(","),
