@@ -1,0 +1,963 @@
+From 3db82d2f310010ad0024d312c01d0c0821deac6c Mon Sep 17 00:00:00 2001
+From: claude <claude@example.com>
+Date: Thu, 5 Nov 2026 01:04:27 +0000
+Subject: [PATCH] Replace image-based character trees with the tracker UI
+
+---
+ README.md                |  14 +-
+ client/CustomTree.tsx    |  43 ++--
+ client/TreeBrowser.tsx   |  32 ++-
+ client/TreeDialog.tsx    | 101 ++++++++++
+ client/style.css         |  14 +-
+ client/treeIndex.ts      |  99 +++++++++
+ shared/trees.ts          | 425 +++++++--------------------------------
+ tests/tree-index.test.ts |  83 ++++++++
+ tests/trees.test.ts      |   6 +-
+ 9 files changed, 415 insertions(+), 402 deletions(-)
+ create mode 100644 client/TreeDialog.tsx
+ create mode 100644 client/treeIndex.ts
+ create mode 100644 tests/tree-index.test.ts
+
+diff --git a/README.md b/README.md
+index 5f9c16b..bf20693 100644
+--- a/README.md
++++ b/README.md
+@@ -56,9 +56,15 @@ For internet play, terminate HTTPS at a reverse proxy, forward WebSocket upgrade
+ 
+ ## Career & specialization trees
+ 
+-Open **Character → Browse trees**. The library holds the 42 reference-image trees plus 135 custom-sheet trees (Age of Rebellion, Edge of the Empire, Force and Destiny and Universal: 18 career signature-ability trees and 117 specializations). Use the **Sheets** and **Game** filters to narrow the list, then **Add to my profile** and click talents to mark them purchased. Custom trees show each talent's text, XP cost, active/ranked type and connectors, and dim talents that no purchased neighbour unlocks; the check is advisory, so house rules still work. Progress is stored per player (`member.trees`), validated by the server (`profile:tree`), and included in player and campaign exports.
++Open **Character → Browse trees**. The tracker holds 135 trees across Age of Rebellion, Edge of the Empire, Force and Destiny and Universal: 18 career signature-ability trees and 117 specializations.
+ 
+-Custom tree data lives in `shared/customTreeMeta.ts` (ids and node counts, shared with the server) and `client/customTreeData.ts` (talent text, loaded on demand). Node numbers: specializations 0-19 in row order; careers 0-8 for signature ability 1 (node 0) and its upgrades, 9-17 for ability 2 (node 9) and its upgrades. Text was read from scans by OCR, so correct any typos directly in `client/customTreeData.ts`.
++- Pick a game and career on the left. The tabs show the career's **Signature Abilities** and each specialization with its purchased count (for example `3/20`).
++- Click a talent to mark it purchased; a tree joins your profile the first time you tick one of its talents. Dimmed talents are not yet reachable through a connector from a purchased talent. The check is advisory, so house rules still work. Dark headers are active talents and ▦ marks ranked talents.
++- The header shows the XP you have spent across every tree. **Search** finds talents and signature abilities by name or text and jumps straight to them. **My Build** lists everything you have purchased, grouped by game and career. **Reset** clears every tree, and **Clear this tree** clears one.
++- Progress is stored per player (`member.trees`), validated by the server (`profile:tree`), and included in player and campaign exports.
++- The earlier reference-image trees were retired. Progress saved under their ids carries over to the matching Edge of the Empire tree (same node numbering); see `legacyTreeIds` and `migrateTreeProgress` in `shared/trees.ts`.
++
++Tree ids and node counts live in `shared/customTreeMeta.ts` (shared with the server) and talent text, costs and connectors in `client/customTreeData.ts` (loaded on demand). The dialog is `client/TreeDialog.tsx` and its pure logic (grouping, reachability, XP, build summary, search) is in `client/treeIndex.ts`. Node numbers: specializations 0-19 in row order; careers 0-8 for signature ability 1 (node 0) and its upgrades, 9-17 for ability 2 (node 9) and its upgrades. Text was read from scans by OCR, so correct any typos directly in `client/customTreeData.ts`.
+ 
+ ## Portable save files
+ 
+@@ -154,8 +160,8 @@ Open the Character tab and upload an OggDude Character XML (up to 5 MB). Review
+ Each member edits their own Character Data; everyone at the table can view it. Data synchronizes through `profile:update` and is included in player and campaign exports/imports. XML is parsed locally; only the reviewed fields are sent to the server. This imports the displayed fields, not the entire OggDude talent/equipment database.
+ 
+ ## Career and specialization trees
+-Open Character → Browse trees to search the 42 supplied Edge of the Empire reference sheets by name or career. Add a tree to your profile, then click its checkboxes to mark or unmark talents. My trees filters your collection; zoom enlarges the original reference image. Removing a tree clears its marks after confirmation. This is a reference tracker, not a prerequisite or XP validator.
++Open Character → Browse trees to work through the 135 career and specialization trees (described above). Click a talent to mark or unmark it; the tree joins your profile on your first click. Clear this tree and Reset remove marks after confirmation. This is a reference tracker, not a prerequisite or XP validator.
+ 
+ Progress persists with your campaign membership and is included in player, table, and campaign exports/imports. Export your player data to carry it into another table. Existing saves without trees continue to work.
+ 
+-Socket event `profile:tree`: `{treeId, operation: "add" | "remove" | "mark", node?, completed?}`. Mark uses a zero-based node and an explicit boolean for safe retries. The server validates the catalog and node bounds and only edits the acting member. Member data adds optional `trees: [{treeId, completed: number[]}]`; catalog and image coordinates live in `shared/trees.ts`, with supplied reference images in `public/trees`.
++Socket event `profile:tree`: `{treeId, operation: "add" | "remove" | "mark", node?, completed?}`. Mark uses a zero-based node and an explicit boolean for safe retries. The server validates the catalog and node bounds and only edits the acting member. Member data adds optional `trees: [{treeId, completed: number[]}]`; the catalog lives in `shared/trees.ts` and `shared/customTreeMeta.ts`. Ids from the retired reference-image trees are remapped to their current ids whenever saved progress is parsed (`migrateTreeProgress`).
+diff --git a/client/CustomTree.tsx b/client/CustomTree.tsx
+index 6f86c63..229f5cf 100644
+--- a/client/CustomTree.tsx
++++ b/client/CustomTree.tsx
+@@ -1,5 +1,7 @@
++import {useEffect,useRef,useState} from 'react';
+ import {customTreeData,type Cell} from './customTreeData';
+ import type {TreeMeta} from '../shared/trees';
++import {isReachable,sigNode,treeXp} from './treeIndex';
+ 
+ // {symbol} markers in generated descriptions map to the dice images in public/dice.
+ const SYMBOLS:Record<string,string>={ability:'ability',advantage:'advantage',boost:'boost',challenge:'challenge',darkpip:'dark',despair:'despair',difficulty:'difficulty',failure:'failure',forcedie:'force',lightpip:'light',proficiency:'proficiency',setback:'setback',success:'success',threat:'threat',triumph:'triumph',forcepoint_r:'forcepoint-r',forcepoint_l:'forcepoint-l'};
+@@ -7,24 +9,24 @@ function Text({s}:{s:string}){
+   return <>{s.split(/\{(\w+)\}/g).map((part,i)=>i%2?(SYMBOLS[part]?<img key={i} className="ct-sym" src={`/dice/${SYMBOLS[part]}.png`} alt={part} title={part}/>:`{${part}}`):part)}</>;
+ }
+ // XP spent in one custom tree; used for the summary line.
+-export function xpSpent(treeId:string,completed:number[]){
+-  const d=customTreeData[treeId];if(!d)return 0;
+-  return completed.reduce((sum,n)=>{
+-    if(d.cells)return sum+(d.cells[n]?.c||0);
+-    const a=Math.floor(n/9),sig=d.sig?.[a];if(!sig)return sum;
+-    return sum+(n%9===0?sig.c:sig.u[n%9-1]?.c||0);
+-  },0);
+-}
+-type Props={tree:TreeMeta;completed:number[];editable:boolean;busy:boolean;onToggle:(node:number,value:boolean)=>void};
+-export default function CustomTree({tree,completed,editable,busy,onToggle}:Props){
+-  const data=customTreeData[tree.id];
++export function xpSpent(treeId:string,completed:readonly number[]){return treeXp(customTreeData[treeId],completed);}
++type Props={tree:TreeMeta;completed:readonly number[];editable?:boolean;onToggle:(node:number,value:boolean)=>void;focus?:{node:number;nonce:number}|null};
++export default function CustomTree({tree,completed,editable=true,onToggle,focus}:Props){
++  const data=customTreeData[tree.id],wrap=useRef<HTMLDivElement>(null),[pulse,setPulse]=useState<number|null>(null);
++  // A search hit scrolls its talent into view and pulses it briefly.
++  useEffect(()=>{
++    if(!focus)return;
++    setPulse(focus.node);
++    wrap.current?.querySelector(`[data-node="${focus.node}"]`)?.scrollIntoView({block:'center',inline:'center',behavior:'smooth'});
++    const timer=setTimeout(()=>setPulse(null),1700);
++    return ()=>clearTimeout(timer);
++  },[focus]);
+   if(!data)return <p role="alert">Tree data is missing for {tree.name}.</p>;
+   const done=new Set(completed);
+-  const toggle=(n:number)=>onToggle(n,!done.has(n));
+   const card=(key:number,name:string,desc:string,cost:number,cls:string,locked:boolean,label:string,ranked=false)=>{
+     const on=done.has(key);
+-    return <button type="button" key={key} role="checkbox" aria-checked={on} aria-label={`${name}, ${cost} XP${label}`} disabled={!editable||busy}
+-      className={`ct-cell ${cls} ${on?'done':''} ${locked&&!on?'locked':''}`} onClick={()=>toggle(key)}>
++    return <button type="button" key={key} role="checkbox" aria-checked={on} aria-label={`${name}, ${cost} XP${label}`} data-node={key} disabled={!editable}
++      className={`ct-cell ${cls} ${on?'done':''} ${locked&&!on?'locked':''} ${pulse===key?'pulse':''}`} onClick={()=>onToggle(key,!on)}>
+       <span className="ct-head"><span className="ct-box">{on?'✓':''}</span><span className="ct-name">{name}</span></span>
+       <span className="ct-desc"><Text s={desc}/></span>{ranked&&<span className="ct-rank" title="Ranked talent">▦</span>}<span className="ct-cost">{cost}</span>
+     </button>;
+@@ -32,15 +34,16 @@ export default function CustomTree({tree,completed,editable,busy,onToggle}:Props
+   let body;
+   if(data.cells){
+     const cells:Cell[]=data.cells;
+-    const open=(i:number)=>{const r=Math.floor(i/4),c=i%4;return r===0||(cells[i-4].dn&&done.has(i-4))||(c>0&&cells[i-1].rt&&done.has(i-1))||(c<3&&cells[i].rt&&done.has(i+1))||(r<4&&cells[i].dn&&done.has(i+4));};
+-    body=<div className="ct-grid">{cells.map((c,i)=>card(i,c.n,c.d,c.c,`${c.a?'active':''} ${c.dn?'dn':''} ${c.rt?'rt':''}`,!open(i),`, row ${Math.floor(i/4)+1} column ${i%4+1}`,!!c.k))}</div>;
++    body=<div className="ct-grid">{cells.map((c,i)=>card(i,c.n,c.d,c.c,`${c.a?'active':''} ${c.dn?'dn':''} ${c.rt?'rt':''}`,!isReachable(cells,done,i),`, row ${Math.floor(i/4)+1} column ${i%4+1}`,!!c.k))}</div>;
+   }else{
+     body=<>{(data.sig||[]).map((a,ai)=><div className="ct-sig" key={ai}>
+-      <div className="ct-sig-main">{card(ai*9,a.n,a.d,a.c,'active wide',false,', signature ability')}</div>
+-      <div className="ct-grid">{a.u.map((u,ui)=>card(ai*9+1+ui,u.n,u.d,u.c,'',!done.has(ai*9),`, upgrade ${ui+1}`))}</div>
++      <div className="ct-sig-main">{card(sigNode(ai),a.n,a.d,a.c,'active wide',false,', signature ability')}</div>
++      <div className="ct-grid">{a.u.map((u,ui)=>card(sigNode(ai,ui),u.n,u.d,u.c,`${ui<4?'dn':''} ${ui%4<3?'rt':''}`,!done.has(sigNode(ai)),`, upgrade ${ui+1}`))}</div>
+     </div>)}</>;
+   }
+-  return <div className="ct-wrap"><div className="ct-meta">{data.skills.length>0&&<span>Career skills: {data.skills.join(', ')}</span>}<span>{completed.length}/{tree.nodes} purchased · {xpSpent(tree.id,completed)} XP spent</span></div>
+-    <p className="ct-hint">Dimmed talents are not yet reachable through a connector from a purchased talent; you can still check them. Dark headers are active talents.</p>
++  const kind=tree.kind==='career'?'Signature abilities (30 XP each, upgrades 10 / 15 XP)':`${tree.career} specialization`;
++  return <div className="ct-wrap" ref={wrap}><div className="ct-meta"><span>{kind} · <b>{completed.length}</b> / {tree.nodes} purchased · <b>{xpSpent(tree.id,completed)}</b> XP spent</span></div>
++    {data.skills.length>0&&<div className="ct-chips" aria-label="Career skills">{data.skills.map(s=><span key={s}>{s}</span>)}</div>}
++    <p className="ct-hint">Click a talent to mark it purchased. Dimmed talents aren’t yet reachable through a connector from a purchased talent. Dark headers are active talents; ▦ marks ranked talents.</p>
+     <div className="tree-scroll"><div className="ct-body">{body}</div></div></div>;
+ }
+diff --git a/client/TreeBrowser.tsx b/client/TreeBrowser.tsx
+index 74dc8aa..ba5559a 100644
+--- a/client/TreeBrowser.tsx
++++ b/client/TreeBrowser.tsx
+@@ -1,25 +1,17 @@
+ import {lazy,Suspense,useState} from 'react';
+-import {trees,talentPosition} from '../shared/trees';
++import {trees,migrateTreeProgress,type TreeMeta,type TreeProgress} from '../shared/trees';
+ import type {Member} from '../shared/types';
+-// The custom-sheet trees carry ~450 KB of talent text, so their viewer is loaded on demand.
+-const CustomTree=lazy(()=>import('./CustomTree'));
++// The dialog carries ~450 KB of talent text, so it is loaded on demand.
++const TreeDialog=lazy(()=>import('./TreeDialog'));
++const label=(t:TreeMeta)=>`${t.game}: ${t.name}`;
+ export default function TreeBrowser({member,send}:{member:Member;send:(e:string,p:unknown,cb?:(ok:boolean)=>void)=>void}){
+- const [open,setOpen]=useState(false),[query,setQuery]=useState(''),[source,setSource]=useState(''),[game,setGame]=useState(''),[career,setCareer]=useState(''),[mine,setMine]=useState(false),[selected,setSelected]=useState<string>(trees[0].id),[zoom,setZoom]=useState(100),[busy,setBusy]=useState(false),[error,setError]=useState('');
+- const tree=trees.find(t=>t.id===selected)!;
+- const saved=member.trees?.find(t=>t.treeId===selected);
+- const update=(operation:string,node?:number,completed?:boolean)=>{setBusy(true);setError('');send('profile:tree',{treeId:selected,operation,node,completed},ok=>{setBusy(false);if(!ok)setError('Could not save tree progress. Please try again.');});};
+- const pool=trees.filter(t=>(!source||(source==='custom')===!!t.custom)&&(!game||t.game===game));
+- const games=[...new Set(trees.filter(t=>t.custom).map(t=>t.game!))];
+- const label=(t:typeof tree)=>`${t.custom?`${t.game}: `:''}${t.name}`;
+- return <section className="tree-launch"><h3>Career & specialization trees</h3><p>{member.trees?.length||0} trees saved to your profile.</p><button className="full" onClick={()=>setOpen(true)}>Browse trees</button>
+- {member.trees?.map(p=>{const t=trees.find(t=>t.id===p.treeId);return t&&<button className="full" key={t.id} onClick={()=>{setSelected(t.id);setOpen(true);setMine(true);}}>{label(t)} · {p.completed.length}/{t.nodes}</button>;})}
+- {open&&<div className="tree-backdrop" onKeyDown={e=>{if(e.key==='Escape')setOpen(false);}}><section role="dialog" aria-modal="true" aria-label="Career and specialization trees" className="tree-dialog"><header><h2>Career & specialization trees</h2><button autoFocus onClick={()=>setOpen(false)}>Close</button></header><div className="tree-layout"><aside>
+- <label>Search trees<input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Name or career"/></label><label>Sheets<select value={source} onChange={e=>{setSource(e.target.value);setGame('');setCareer('');}}><option value="">All sheets</option><option value="reference">Reference images</option><option value="custom">Custom sheets</option></select></label>{source!=='reference'&&<label>Game<select value={game} onChange={e=>{setGame(e.target.value);setCareer('');}}><option value="">All games</option>{games.map(g=><option key={g}>{g}</option>)}</select></label>}<label>Career<select value={career} onChange={e=>setCareer(e.target.value)}><option value="">All careers</option>{[...new Set(pool.map(t=>t.career))].map(c=><option key={c}>{c}</option>)}</select></label><label><input type="checkbox" checked={mine} onChange={e=>setMine(e.target.checked)}/> My trees only</label>
+- <nav aria-label="Tree library">{pool.filter(t=>(!career||t.career===career)&&(!mine||member.trees?.some(p=>p.treeId===t.id))&&`${t.name} ${t.career} ${t.game||''}`.toLowerCase().includes(query.toLowerCase())).map(t=><button key={t.id} aria-pressed={selected===t.id} onClick={()=>{setSelected(t.id);setZoom(100);}}><strong>{t.name}</strong><small>{t.custom?`${t.game} · `:''}{t.career} · {t.kind==='career'?'Signature abilities':'Specialization'}{member.trees?.some(p=>p.treeId===t.id)?' · Added':''}</small></button>)}</nav></aside>
+- <main><div className="tree-controls"><strong>{tree.custom?`${tree.game} / `:''}{tree.career} / {tree.name}</strong>{saved?<><span>{saved.completed.length}/{tree.nodes} completed</span><button disabled={busy} onClick={()=>{if(window.confirm('Remove this tree and its talent checkmarks from your profile?'))update('remove');}}>Remove tree</button></>:<button disabled={busy} onClick={()=>update('add')}>Add to my profile</button>}{!tree.custom&&<label>Zoom <select value={zoom} onChange={e=>setZoom(Number(e.target.value))}>{[75,100,125,150,200].map(n=><option key={n} value={n}>{n}%</option>)}</select></label>}</div>
+- <p>{saved?'Click a checkbox to mark or unmark a completed talent. Changes save automatically.':'Add this tree to your profile to mark completed talents.'} Progress is included in player and game exports.</p>{error&&<p role="alert">{error}</p>}
+- {tree.custom?<Suspense fallback={<p>Loading tree…</p>}><CustomTree key={tree.id} tree={tree} completed={saved?.completed||[]} editable={!!saved} busy={busy} onToggle={(n,v)=>update('mark',n,v)}/></Suspense>
+- :<div className="tree-scroll"><div className="tree-sheet" style={{width:`${zoom}%`}}><img src={tree.image} alt={`${tree.career}: ${tree.name} reference tree`} draggable={false}/>{Array.from({length:tree.nodes},(_,n)=>{const pos=talentPosition(tree.kind,n),checked=saved?.completed.includes(n)||false;return <button key={n} className={`talent-mark ${checked?'completed':''}`} style={{left:`${pos.x}%`,top:`${pos.y}%`}} disabled={!saved||busy} aria-label={`Talent ${n+1}${tree.kind==='specialization'?`, row ${Math.floor(n/4)+1}, column ${n%4+1}`:''}`} aria-pressed={checked} title={`Talent ${n+1}: ${checked?'completed':'not completed'}`} onClick={()=>update('mark',n,!checked)}>{checked?'✓':''}</button>;})}</div></div>}
+- </main></div></section></div>}
++ const [open,setOpen]=useState(false),[focusId,setFocusId]=useState<string>();
++ // Progress saved under the retired reference-image tree ids is shown under their current ids.
++ const saved=migrateTreeProgress(member.trees??[]) as TreeProgress;
++ const active=saved.flatMap(p=>{const t=trees.find(t=>t.id===p.treeId);return t&&p.completed.length?[{t,count:p.completed.length}]:[];});
++ const show=(id?:string)=>{setFocusId(id);setOpen(true);};
++ return <section className="tree-launch"><h3>Career & specialization trees</h3><p>{active.length} {active.length===1?'tree':'trees'} with purchased talents.</p><button className="full" onClick={()=>show()}>Browse trees</button>
++  {active.map(({t,count})=><button className="full" key={t.id} onClick={()=>show(t.id)}>{label(t)} · {count}/{t.nodes}</button>)}
++  {open&&<Suspense fallback={<div className="tree-backdrop"><p>Loading trees…</p></div>}><TreeDialog saved={saved} send={send} initialTreeId={focusId} onClose={()=>setOpen(false)}/></Suspense>}
+  </section>;
+ }
+diff --git a/client/TreeDialog.tsx b/client/TreeDialog.tsx
+new file mode 100644
+index 0000000..a9c026a
+--- /dev/null
++++ b/client/TreeDialog.tsx
+@@ -0,0 +1,101 @@
++import {useEffect,useMemo,useRef,useState} from 'react';
++import {trees,type TreeProgress} from '../shared/trees';
++import {customTreeData} from './customTreeData';
++import CustomTree from './CustomTree';
++import {buildSummary,groupTrees,searchTrees,toProgress,totals,type Progress} from './treeIndex';
++
++// The career & specialization tracker: browse by game and career, tick talents, see XP and your whole build.
++// Progress is saved per player through the server's profile:tree action (add / mark / remove).
++type Send=(event:string,payload:unknown,done?:(ok:boolean)=>void)=>void;
++type Props={saved:TreeProgress;send:Send;initialTreeId?:string;onClose:()=>void};
++type Sel={game:string;career:string;tab:string};
++const sameSet=(a:ReadonlySet<number>,b:readonly number[])=>a.size===b.length&&b.every(n=>a.has(n));
++const groups=groupTrees();
++const findTree=(id?:string)=>trees.find(t=>t.id===id);
++// The tab shown first for a career: its signature abilities when it has any, else its first specialization.
++const firstTab=(g:string,c:string)=>{const cg=groups.find(x=>x.name===g)?.careers.find(x=>x.name===c);return cg?.career?.id??cg?.specs[0]?.id??'';};
++const startSel=(id?:string):Sel=>{
++  const t=findTree(id);
++  if(t)return {game:t.game,career:t.career,tab:t.id};
++  const g=groups[0],c=g.careers[0];return {game:g.name,career:c.name,tab:firstTab(g.name,c.name)};
++};
++
++export default function TreeDialog({saved,send,initialTreeId,onClose}:Props){
++  const [sel,setSel]=useState<Sel>(()=>startSel(initialTreeId)),[build,setBuild]=useState(false),[query,setQuery]=useState(''),[showHits,setShowHits]=useState(false),[error,setError]=useState('');
++  const [focus,setFocus]=useState<{treeId:string;node:number;nonce:number}|null>(null);
++  // Optimistic overlay so ticking feels instant; an entry is dropped once the server snapshot agrees (null = tree removed).
++  const [over,setOver]=useState<Record<string,number[]|null>>({});
++  const added=useRef(new Set<string>());
++  const live=useRef<Progress>(new Map());   // always the newest progress, so back-to-back clicks never read a stale render
++  const serverMap=useMemo(()=>toProgress(saved),[saved]);
++  const progress=useMemo(()=>{
++    const m=new Map(serverMap);
++    for(const [id,v] of Object.entries(over)){if(v===null)m.delete(id);else m.set(id,new Set(v));}
++    return m;
++  },[serverMap,over]);
++  live.current=progress;
++  useEffect(()=>setOver(o=>{
++    let changed=false;const n={...o};
++    for(const [id,v] of Object.entries(o)){const s=serverMap.get(id);if(v===null?s===undefined:s!==undefined&&sameSet(s,v)){delete n[id];changed=true;}}
++    return changed?n:o;
++  }),[serverMap]);
++
++  const fail=(id:string)=>{setError('Could not save tree progress. Please try again.');added.current.delete(id);setOver(o=>{const {[id]:_,...rest}=o;return rest;});};
++  const toggle=(treeId:string,node:number,value:boolean)=>{
++    setError('');
++    const have=live.current.get(treeId),next=new Set(have??[]);
++    if(value)next.add(node);else next.delete(node);
++    live.current=new Map(live.current).set(treeId,next);
++    setOver(o=>({...o,[treeId]:[...next].sort((a,b)=>a-b)}));
++    // A tree joins the player's profile the first time one of its talents is ticked.
++    if(!have&&!added.current.has(treeId)){added.current.add(treeId);send('profile:tree',{treeId,operation:'add'});}
++    send('profile:tree',{treeId,operation:'mark',node,completed:value},ok=>{if(!ok)fail(treeId);});
++  };
++  const clearTrees=(ids:string[])=>{
++    setError('');
++    setOver(o=>({...o,...Object.fromEntries(ids.map(id=>[id,null]))}));
++    for(const id of ids){added.current.delete(id);send('profile:tree',{treeId:id,operation:'remove'},ok=>{if(!ok)fail(id);});}
++  };
++
++  const stats=useMemo(()=>totals(customTreeData,progress),[progress]);
++  const hits=useMemo(()=>searchTrees(groups,customTreeData,query),[query]);
++  const summary=useMemo(()=>buildSummary(groups,customTreeData,progress),[progress]);
++  const game=groups.find(g=>g.name===sel.game)!,cg=game.careers.find(c=>c.name===sel.career)!;
++  const tabs=[...(cg.career?[cg.career]:[]),...cg.specs],tree=tabs.find(t=>t.id===sel.tab)??tabs[0];
++  const done=(id:string)=>progress.get(id)?.size??0;
++  const careerCount=(c:typeof cg)=>c.specs.reduce((n,s)=>n+done(s.id),0);
++  const pick=(g:string,c:string)=>{setSel({game:g,career:c,tab:firstTab(g,c)});setBuild(false);setFocus(null);};
++  const jump=(h:{treeId:string;node:number})=>{
++    const t=findTree(h.treeId)!;
++    setSel({game:t.game,career:t.career,tab:t.id});setBuild(false);setShowHits(false);setFocus({treeId:h.treeId,node:h.node,nonce:Date.now()});
++  };
++  const close=()=>{if(showHits&&query.length>=2)setShowHits(false);else onClose();};
++  const title=cg.name===game.name?`${cg.name} specializations`:cg.name;
++
++  return <div className="tree-backdrop" onKeyDown={e=>{if(e.key==='Escape')close();}}><section role="dialog" aria-modal="true" aria-label="Career and specialization trees" className="tree-dialog">
++    <header><h2>Career <span>&amp;</span> specialization trees</h2>
++      <span className="tree-xp" aria-live="polite">{stats.xp} XP</span>
++      <div className="tree-search" onBlur={e=>{if(!e.currentTarget.contains(e.relatedTarget))setShowHits(false);}}>
++        <input type="search" value={query} placeholder="Search talents & abilities…" aria-label="Search talents and abilities" onChange={e=>{setQuery(e.target.value);setShowHits(true);}} onFocus={()=>setShowHits(true)}/>
++        {showHits&&query.trim().length>=2&&(hits.length?<ul className="tree-results">{hits.map(h=><li key={`${h.treeId}:${h.node}`}><button type="button" onClick={()=>jump(h)}>{h.name}<small>{h.where}</small></button></li>)}</ul>:<p className="tree-results">No matches</p>)}
++      </div>
++      <button aria-pressed={build} onClick={()=>setBuild(b=>!b)}>My Build</button>
++      <button disabled={!stats.count} onClick={()=>{if(window.confirm('Clear every checked talent and ability?'))clearTrees([...progress.keys()]);}}>Reset</button>
++      <button autoFocus onClick={onClose}>Close</button></header>
++    <div className="tree-layout"><aside><nav aria-label="Careers">{groups.map(g=><div key={g.name}><h3>{g.name}</h3>{g.careers.map(c=><button type="button" key={c.name} aria-pressed={!build&&sel.game===g.name&&sel.career===c.name} onClick={()=>pick(g.name,c.name)}><span>{c.name}</span><em>{careerCount(c)}</em></button>)}</div>)}</nav></aside>
++    <main>{error&&<p role="alert">{error}</p>}
++      {build?<div className="tree-scroll"><div className="tree-build"><h2>My Build</h2><p className="tree-sub">Everything you’ve checked off, across all trees.</p>
++        <p className="tree-big">{stats.xp} XP <span className="tree-sub">· {stats.count} purchases</span></p>
++        {summary.length?summary.map(s=><section key={`${s.game}:${s.career}`}><h3>{s.game} — {s.career}</h3><ul>{s.items.map(it=>it.kind==='signature'
++          ?<li key={it.name}><b>{it.name}</b> (signature){!it.base&&<i> — upgrades without base ability</i>}{it.upgrades.length>0&&`: ${it.upgrades.join(', ')}`}</li>
++          :<li key={it.name}><b>{it.name}</b> ({it.owned}/20): {it.talents.map(t=>t.count>1?`${t.name} ×${t.count}`:t.name).join(', ')}</li>)}</ul></section>)
++          :<p className="tree-sub">Nothing checked yet. Pick a career on the left and click talents to add them.</p>}
++      </div></div>
++      :<>
++        <div className="tree-title"><h2>{title}</h2><span className="tree-sub">{game.name}</span>
++          {tree&&done(tree.id)>0&&<button className="tree-clear" onClick={()=>{if(window.confirm(`Clear the checkmarks on ${tree.name}?`))clearTrees([tree.id]);}}>Clear this tree</button>}</div>
++        <div className="tree-tabs" role="group" aria-label="Trees in this career">{tabs.map(t=><button type="button" key={t.id} aria-pressed={t.id===tree?.id} onClick={()=>{setSel({...sel,tab:t.id});setFocus(null);}}>{t.kind==='career'?'Signature Abilities':t.name}{t.kind==='specialization'&&<em> {done(t.id)}/{t.nodes}</em>}</button>)}</div>
++        {tree&&<>{tree.kind==='specialization'&&<h3 className="tree-spec">{tree.name}</h3>}<CustomTree key={tree.id} tree={tree} completed={[...(progress.get(tree.id)??[])]} onToggle={(n,v)=>toggle(tree.id,n,v)} focus={focus?.treeId===tree.id?focus:null}/></>}
++      </>}
++    </main></div></section></div>;
++}
+diff --git a/client/style.css b/client/style.css
+index 0052e6a..e0db48d 100644
+--- a/client/style.css
++++ b/client/style.css
+@@ -1818,13 +1818,19 @@ h1,h2,h3,.brand {font-family:Starjhol,SWEuro,sans-serif;letter-spacing:.04em;}
+ .character-panel input {min-width:0;width:100%;}
+ @media (min-width:1000px) {.tabletop:has(.character-panel) {grid-template-columns:340px minmax(280px,1fr) 306px;}}
+ .tree-launch{margin:20px 0;padding-top:15px;border-top:1px solid #344858}.tree-launch button{margin-bottom:8px}
+-.tree-backdrop{position:fixed;inset:0;z-index:200;background:#000c;padding:20px;display:flex;align-items:center;justify-content:center}.tree-dialog{width:min(1400px,100%);height:94vh;background:#101923;border:1px solid #71899b;border-radius:10px;display:flex;flex-direction:column;overflow:hidden}.tree-dialog>header{display:flex;align-items:center;justify-content:space-between;padding:12px 20px;border-bottom:1px solid #344858}.tree-dialog h2{font-size:18px}.tree-layout{display:grid;grid-template-columns:250px minmax(0,1fr);min-height:0;flex:1}.tree-layout>aside{padding:16px;overflow:auto;border-right:1px solid #344858}.tree-layout nav{display:grid;gap:8px;margin-top:15px}.tree-layout nav button{text-align:left;padding:10px}.tree-layout nav small{display:block;margin-top:5px;color:#a6bacb}.tree-layout nav button[aria-pressed=true]{border-color:#f1bd72;background:#30404e}.tree-layout>main{padding:16px;display:flex;flex-direction:column;min-width:0;min-height:0}.tree-controls{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.tree-controls select{width:auto}.tree-scroll{overflow:auto;flex:1;background:#080e14}.tree-sheet{position:relative;min-width:500px;margin:auto}.tree-sheet img{width:100%;display:block}.tree-sheet .talent-mark{position:absolute;transform:translate(-50%,-50%);width:2.1%;aspect-ratio:1;padding:0;min-height:0;border:2px solid #16637e;background:#fff;color:#002f32;display:grid;place-items:center;font-family:Arial,sans-serif;font-weight:bold;font-size:clamp(12px,1.5vw,26px);border-radius:2px}.tree-sheet .talent-mark.completed{background:#50e5be;border-color:#003d32;box-shadow:0 0 0 3px #50e5be80}.tree-sheet .talent-mark:disabled{opacity:.65}.tree-layout input[type=checkbox]{width:auto;margin-right:8px}
+-@media(max-width:750px){.tree-backdrop{padding:4px}.tree-layout{grid-template-columns:170px minmax(0,1fr)}.tree-layout>aside,.tree-layout>main{padding:8px}.tree-dialog h2{font-size:14px}}
++.tree-backdrop{position:fixed;inset:0;z-index:200;background:#000c;padding:20px;display:flex;align-items:center;justify-content:center}.tree-dialog{width:min(1400px,100%);height:94vh;background:#101923;border:1px solid #71899b;border-radius:10px;display:flex;flex-direction:column;overflow:hidden}
++.tree-dialog>header{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 16px;border-bottom:1px solid #344858}.tree-dialog>header h2{font-size:18px;margin:0 auto 0 0}.tree-dialog>header h2 span{color:#f1bd72}.tree-dialog>header button{margin:0}.tree-xp{font-weight:700;color:#f1bd72}
++.tree-search{position:relative}.tree-search input{width:240px;max-width:100%}.tree-results{position:absolute;right:0;top:100%;z-index:5;width:min(420px,90vw);max-height:60vh;overflow:auto;margin:4px 0 0;padding:0;list-style:none;background:#18222d;border:1px solid #71899b;border-radius:8px;box-shadow:0 8px 24px #0006}p.tree-results{padding:10px 12px}.tree-results li{margin:0}.tree-results button{display:block;width:100%;text-align:left;margin:0;border:0;border-bottom:1px solid #344858;border-radius:0;background:none;padding:8px 12px}.tree-results button:hover{background:#30404e}.tree-results small{display:block;color:#a6bacb}
++.tree-layout{display:grid;grid-template-columns:250px minmax(0,1fr);min-height:0;flex:1}.tree-layout>aside{padding:12px;overflow:auto;border-right:1px solid #344858}.tree-layout>aside h3{margin:14px 0 6px;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#a6bacb}.tree-layout>aside div:first-child h3{margin-top:0}.tree-layout>aside button{display:flex;justify-content:space-between;width:100%;margin:0;padding:6px 8px;text-align:left;border:0;background:none;border-radius:6px}.tree-layout>aside button[aria-pressed=true]{background:#30404e;outline:1px solid #f1bd72}.tree-layout>aside em{font-style:normal;color:#a6bacb;font-size:12px}
++.tree-layout>main{padding:16px;display:flex;flex-direction:column;min-width:0;min-height:0}.tree-title{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}.tree-title h2{margin:0;font-size:24px;text-transform:uppercase;letter-spacing:.04em}.tree-clear{margin:0 0 0 auto}.tree-sub{color:#a6bacb}.tree-spec{margin:0 0 4px;font-size:18px;text-transform:uppercase}
++.tree-tabs{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 14px}.tree-tabs button{margin:0}.tree-tabs button[aria-pressed=true]{border-color:#f1bd72;background:#30404e}.tree-tabs em{font-style:normal;opacity:.7}.tree-scroll{overflow:auto;flex:1;background:#080e14}
++.tree-build{padding:14px 18px 22px;max-width:900px}.tree-build h2{margin:0;font-size:24px;text-transform:uppercase}.tree-build h3{margin:18px 0 4px;font-size:15px;color:#f1bd72}.tree-build li{margin:2px 0}.tree-big{font-size:28px;font-weight:700;color:#f1bd72;margin:8px 0}.tree-big .tree-sub{font-size:14px;font-weight:400}.tree-layout input[type=checkbox]{width:auto;margin-right:8px}
++@media(max-width:750px){.tree-backdrop{padding:4px}.tree-layout{grid-template-columns:150px minmax(0,1fr)}.tree-layout>aside,.tree-layout>main{padding:8px}.tree-dialog h2{font-size:14px}.tree-title h2{font-size:18px}.tree-search input{width:150px}}
+ 
+-.ct-wrap{display:flex;flex-direction:column;min-height:0;flex:1}.ct-meta{display:flex;flex-wrap:wrap;gap:6px 18px;margin:6px 0;color:#a6bacb;font-size:13px}.ct-hint{font-size:12px;color:#a6bacb;margin:0 0 8px}
++.ct-wrap{display:flex;flex-direction:column;min-height:0;flex:1}.ct-meta{display:flex;flex-wrap:wrap;gap:6px 18px;margin:6px 0;color:#a6bacb;font-size:13px}.ct-meta b{color:#f1bd72}.ct-chips{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 10px}.ct-chips span{background:#18222d;border:1px solid #344858;border-radius:20px;padding:2px 10px;font-size:12px;color:#a6bacb}.ct-hint{font-size:12px;color:#a6bacb;margin:0 0 8px}
+ .ct-body{padding:14px 18px 22px;min-width:760px}.ct-grid{display:grid;grid-template-columns:repeat(4,minmax(170px,1fr));gap:28px;max-width:1100px}
+ .ct-cell{margin:0;position:relative;display:block;text-align:left;padding:0 0 26px;min-height:132px;background:#18222d;color:#e8eef3;border:2px solid #44596b;border-radius:3px 12px 3px 12px;font:inherit;font-size:12.5px;line-height:1.35;cursor:pointer}
+-.ct-cell:disabled{cursor:default;opacity:.8}.ct-cell.locked{opacity:.5}.ct-cell.done{border-color:#50e5be;box-shadow:0 0 0 2px #50e5be80 inset;opacity:1}
++.ct-cell:disabled{cursor:default;opacity:.8}.ct-cell.pulse{animation:ct-pulse 1.6s}@keyframes ct-pulse{0%,60%{box-shadow:0 0 0 4px #f1bd72}}.ct-cell.locked{opacity:.5}.ct-cell.done{border-color:#50e5be;box-shadow:0 0 0 2px #50e5be80 inset;opacity:1}
+ .ct-head{display:flex;align-items:center;gap:6px;padding:4px 8px;background:#5b6068;color:#fff;font-weight:700;font-size:11.5px;letter-spacing:.04em;text-transform:uppercase;border-radius:1px 10px 0 0}.ct-cell.active .ct-head{background:#2b2b2b}
+ .ct-box{flex:none;width:14px;height:14px;background:#fff;color:#0a7a45;border:1px solid #444;border-radius:2px;display:inline-grid;place-items:center;font-size:12px;line-height:1}.ct-name{flex:1;text-align:center}
+ .ct-desc{display:block;padding:6px 9px}.ct-sym{height:1.3em;width:auto;vertical-align:-.3em;background:#fff;border-radius:3px;padding:1px;margin:0 1px}
+diff --git a/client/treeIndex.ts b/client/treeIndex.ts
+new file mode 100644
+index 0000000..4c932d0
+--- /dev/null
++++ b/client/treeIndex.ts
+@@ -0,0 +1,99 @@
++import {trees,type TreeMeta} from '../shared/trees';
++import type {Cell,CustomTreeData} from './customTreeData';
++
++// Pure helpers behind the tree dialog (ported from the standalone Specialization & Career Tracker).
++// Progress is a map of tree id -> purchased node numbers; node numbering is documented in shared/trees.ts.
++export type Data=Readonly<Record<string,CustomTreeData>>;
++export type Progress=ReadonlyMap<string,ReadonlySet<number>>;
++export type CareerGroup={name:string;career?:TreeMeta;specs:TreeMeta[]};
++export type GameGroup={name:string;careers:CareerGroup[]};
++
++/** Games > careers > trees, in the order the sheets list them. A career without a signature tree (Universal) has none. */
++export function groupTrees(list:readonly TreeMeta[]=trees):GameGroup[]{
++  const games:GameGroup[]=[];
++  for(const t of list){
++    let g=games.find(x=>x.name===t.game);if(!g)games.push(g={name:t.game,careers:[]});
++    let c=g.careers.find(x=>x.name===t.career);if(!c)g.careers.push(c={name:t.career,specs:[]});
++    if(t.kind==='career')c.career=t;else c.specs.push(t);
++  }
++  return games;
++}
++
++/** Progress lookup from the saved list ({treeId,completed}[]). */
++export const toProgress=(saved:readonly {treeId:string;completed:readonly number[]}[]):Progress=>new Map(saved.map(p=>[p.treeId,new Set(p.completed)]));
++
++/** A talent can be checked freely, but it is "reachable" when a purchased neighbour has a connector into it. */
++export function isReachable(cells:readonly Cell[],done:ReadonlySet<number>,i:number):boolean{
++  const r=Math.floor(i/4),c=i%4;
++  return r===0||(cells[i-4].dn===1&&done.has(i-4))||(c>0&&cells[i-1].rt===1&&done.has(i-1))||(c<3&&cells[i].rt===1&&done.has(i+1))||(r<4&&cells[i].dn===1&&done.has(i+4));
++}
++
++/** Signature trees: node ability*9 is the ability, ability*9+1+u its upgrades. */
++export const sigNode=(ability:number,upgrade?:number)=>ability*9+(upgrade===undefined?0:upgrade+1);
++
++/** XP spent in one tree. */
++export function treeXp(d:CustomTreeData|undefined,done:ReadonlySet<number>|readonly number[]):number{
++  if(!d)return 0;
++  let xp=0;
++  for(const n of done){
++    if(d.cells)xp+=d.cells[n]?.c||0;
++    else{const sig=d.sig?.[Math.floor(n/9)];if(sig)xp+=n%9===0?sig.c:sig.u[n%9-1]?.c||0;}
++  }
++  return xp;
++}
++
++/** Total XP and number of purchases across every tree. */
++export function totals(data:Data,progress:Progress):{xp:number;count:number}{
++  let xp=0,count=0;
++  for(const [id,done] of progress){if(!data[id])continue;xp+=treeXp(data[id],done);count+=done.size;}
++  return {xp,count};
++}
++
++export type BuildItem=
++  |{kind:'signature';name:string;base:boolean;upgrades:string[]}
++  |{kind:'specialization';name:string;owned:number;talents:{name:string;count:number}[]};
++export type BuildSection={game:string;career:string;items:BuildItem[]};
++
++/** Everything purchased, grouped by game and career (the tracker's "My Build" view). */
++export function buildSummary(groups:readonly GameGroup[],data:Data,progress:Progress):BuildSection[]{
++  const out:BuildSection[]=[];
++  for(const g of groups)for(const c of g.careers){
++    const items:BuildItem[]=[];
++    const sigData=c.career&&data[c.career.id]?.sig,sigDone=c.career&&progress.get(c.career.id);
++    sigData?.forEach((a,ai)=>{
++      const base=!!sigDone?.has(sigNode(ai)),upgrades=a.u.filter((_,ui)=>sigDone?.has(sigNode(ai,ui))).map(u=>u.n);
++      if(base||upgrades.length)items.push({kind:'signature',name:a.n,base,upgrades});
++    });
++    for(const sp of c.specs){
++      const done=progress.get(sp.id),cells=data[sp.id]?.cells;
++      if(!done||!cells)continue;
++      const counts=new Map<string,number>();
++      cells.forEach((cell,i)=>{if(done.has(i))counts.set(cell.n,(counts.get(cell.n)||0)+1);});
++      if(counts.size)items.push({kind:'specialization',name:sp.name,owned:done.size,talents:[...counts].map(([name,count])=>({name,count}))});
++    }
++    if(items.length)out.push({game:g.name,career:c.name,items});
++  }
++  return out;
++}
++
++export type SearchHit={treeId:string;node:number;name:string;where:string};
++const plain=(s:string)=>s.replace(/\{\w+\}/g,'');
++
++/** Search talent names and text (signature abilities too, not their upgrades). Needs 2+ characters. */
++export function searchTrees(groups:readonly GameGroup[],data:Data,query:string,limit=40):SearchHit[]{
++  const q=query.trim().toLowerCase(),out:SearchHit[]=[];
++  if(q.length<2)return out;
++  const match=(n:string,d:string)=>n.toLowerCase().includes(q)||plain(d).toLowerCase().includes(q);
++  for(const g of groups)for(const c of g.careers){
++    for(const sp of c.specs){
++      const cells=data[sp.id]?.cells,seen=new Set<string>();
++      cells?.forEach((cell,i)=>{
++        if(out.length<limit&&!seen.has(cell.n)&&match(cell.n,cell.d)){seen.add(cell.n);out.push({treeId:sp.id,node:i,name:cell.n,where:`${sp.name} · ${c.name} · ${cell.c} XP`});}
++      });
++    }
++    if(c.career)data[c.career.id]?.sig?.forEach((a,ai)=>{
++      if(out.length<limit&&match(a.n,a.d))out.push({treeId:c.career!.id,node:sigNode(ai),name:a.n,where:`Signature ability · ${c.name}`});
++    });
++  }
++  return out;
++}
+diff --git a/shared/trees.ts b/shared/trees.ts
+index f747bd0..56b4c17 100644
+--- a/shared/trees.ts
++++ b/shared/trees.ts
+@@ -1,356 +1,79 @@
+ import {z} from "zod";
+-import {customTreeMeta} from "./customTreeMeta.js";
+-const baseTrees = [
+-  {
+-    "id": "bounty-hunter-career",
+-    "name": "Bounty Hunter Career",
+-    "career": "Bounty Hunter",
+-    "kind": "career",
+-    "image": "/trees/bounty-hunter-career.png",
+-    "nodes": 18
+-  },
+-  {
+-    "id": "colonist-career",
+-    "name": "Colonist Career",
+-    "career": "Colonist",
+-    "kind": "career",
+-    "image": "/trees/colonist-career.png",
+-    "nodes": 18
+-  },
+-  {
+-    "id": "explorer-career",
+-    "name": "Explorer Career",
+-    "career": "Explorer",
+-    "kind": "career",
+-    "image": "/trees/explorer-career.png",
+-    "nodes": 18
+-  },
+-  {
+-    "id": "hired-gun-career",
+-    "name": "Hired Gun Career",
+-    "career": "Hired Gun",
+-    "kind": "career",
+-    "image": "/trees/hired-gun-career.png",
+-    "nodes": 18
+-  },
+-  {
+-    "id": "smuggler-career",
+-    "name": "Smuggler Career",
+-    "career": "Smuggler",
+-    "kind": "career",
+-    "image": "/trees/smuggler-career.png",
+-    "nodes": 18
+-  },
+-  {
+-    "id": "technician-career",
+-    "name": "Technician Career",
+-    "career": "Technician",
+-    "kind": "career",
+-    "image": "/trees/technician-career.png",
+-    "nodes": 18
+-  },
+-  {
+-    "id": "bounty-hunter-assassin",
+-    "name": "Assassin",
+-    "career": "Bounty Hunter",
+-    "kind": "specialization",
+-    "image": "/trees/bounty-hunter-assassin.png",
+-    "nodes": 20
+-  },
+-  {
+-    "id": "bounty-hunter-gadgeteer",
+-    "name": "Gadgeteer",
+-    "career": "Bounty Hunter",
+-    "kind": "specialization",
+-    "image": "/trees/bounty-hunter-gadgeteer.png",
+-    "nodes": 20
+-  },
+-  {
+-    "id": "bounty-hunter-martial-artist",
+-    "name": "Martial Artist",
+-    "career": "Bounty Hunter",
+-    "kind": "specialization",
+-    "image": "/trees/bounty-hunter-martial-artist.png",
+-    "nodes": 20
+-  },
+-  {
+-    "id": "bounty-hunter-operator",
+-    "name": "Operator",
+-    "career": "Bounty Hunter",
+-    "kind": "specialization",
+-    "image": "/trees/bounty-hunter-operator.png",
+-    "nodes": 20
+-  },
+-  {
+-    "id": "bounty-hunter-skip-tracer",
+-    "name": "Skip Tracer",
+-    "career": "Bounty Hunter",
+-    "kind": "specialization",
+-    "image": "/trees/bounty-hunter-skip-tracer.png",
+-    "nodes": 20
+-  },
+-  {
+-    "id": "bounty-hunter-survivalist",
+-    "name": "Survivalist",
+-    "career": "Bounty Hunter",
+-    "kind": "specialization",
+-    "image": "/trees/bounty-hunter-survivalist.png",
+-    "nodes": 20
+-  },
+-  {
+-    "id": "colonist-doctor",
+-    "name": "Doctor",
+-    "career": "Colonist",
+-    "kind": "specialization",
+-    "image": "/trees/colonist-doctor.png",
+-    "nodes": 20
+-  },
+-  {
+-    "id": "colonist-entrepreneur",
+-    "name": "Entrepreneur",
+-    "career": "Colonist",
+-    "kind": "specialization",
+-    "image": "/trees/colonist-entrepreneur.png",
+-    "nodes": 20
+-  },
+-  {
+-    "id": "colonist-marshal",
+-    "name": "Marshal",
+-    "career": "Colonist",
+-    "kind": "specialization",
+-    "image": "/trees/colonist-marshal.png",
+-    "nodes": 20
+-  },
+-  {
+-    "id": "colonist-performer",
+-    "name": "Performer",
+-    "career": "Colonist",
+-    "kind": "specialization",
+-    "image": "/trees/colonist-performer.png",
+-    "nodes": 20
+-  },
+-  {
+-    "id": "colonist-politico",
+-    "name": "Politico",
+-    "career": "Colonist",
+-    "kind": "specialization",
+-    "image": "/trees/colonist-politico.png",
+-    "nodes": 20
+-  },
+-  {
+-    "id": "colonist-scholar",
+-    "name": "Scholar",
+-    "career": "Colonist",
+-    "kind": "specialization",
+-    "image": "/trees/colonist-scholar.png",
+-    "nodes": 20
+-  },
+-  {
+-    "id": "explorer-archaeologist",
+-    "name": "Archaeologist",
+-    "career": "Explorer",
+-    "kind": "specialization",
+-    "image": "/trees/explorer-archaeologist.png",
+-    "nodes": 20
+-  },
+-  {
+-    "id": "explorer-big-game-hunter",
+-    "name": "Big-Game Hunter",
+-    "career": "Explorer",
+-    "kind": "specialization",
+-    "image": "/trees/explorer-big-game-hunter.png",
+-    "nodes": 20
+-  },
+-  {
+-    "id": "explorer-driver",
+-    "name": "Driver",
+-    "career": "Explorer",
+-    "kind": "specialization",
+-    "image": "/trees/explorer-driver.png",
+-    "nodes": 20
+-  },
+-  {
+-    "id": "explorer-fringer",
+-    "name": "Fringer",
+-    "career": "Explorer",
+-    "kind": "specialization",
+-    "image": "/trees/explorer-fringer.png",
+-    "nodes": 20
+-  },
+-  {
+-    "id": "explorer-scout",
+-    "name": "Scout",
+-    "career": "Explorer",
+-    "kind": "specialization",
+-    "image": "/trees/explorer-scout.png",
+-    "nodes": 20
+-  },
+-  {
+-    "id": "explorer-trader",
+-    "name": "Trader",
+-    "career": "Explorer",
+-    "kind": "specialization",
+-    "image": "/trees/explorer-trader.png",
+-    "nodes": 20
+-  },
+-  {
+-    "id": "hired-gun-bodyguard",
+-    "name": "Bodyguard",
+-    "career": "Hired Gun",
+-    "kind": "specialization",
+-    "image": "/trees/hired-gun-bodyguard.png",
+-    "nodes": 20
+-  },
+-  {
+-    "id": "hired-gun-demolitionist",
+-    "name": "Demolitionist",
+-    "career": "Hired Gun",
+-    "kind": "specialization",
+-    "image": "/trees/hired-gun-demolitionist.png",
+-    "nodes": 20
+-  },
+-  {
+-    "id": "hired-gun-enforcer",
+-    "name": "Enforcer",
+-    "career": "Hired Gun",
+-    "kind": "specialization",
+-    "image": "/trees/hired-gun-enforcer.png",
+-    "nodes": 20
+-  },
+-  {
+-    "id": "hired-gun-heavy",
+-    "name": "Heavy",
+-    "career": "Hired Gun",
+-    "kind": "specialization",
+-    "image": "/trees/hired-gun-heavy.png",
+-    "nodes": 20
+-  },
+-  {
+-    "id": "hired-gun-marauder",
+-    "name": "Marauder",
+-    "career": "Hired Gun",
+-    "kind": "specialization",
+-    "image": "/trees/hired-gun-marauder.png",
+-    "nodes": 20
+-  },
+-  {
+-    "id": "hired-gun-mercenary-soldier",
+-    "name": "Mercenary Soldier",
+-    "career": "Hired Gun",
+-    "kind": "specialization",
+-    "image": "/trees/hired-gun-mercenary-soldier.png",
+-    "nodes": 20
+-  },
+-  {
+-    "id": "smuggler-charmer",
+-    "name": "Charmer",
+-    "career": "Smuggler",
+-    "kind": "specialization",
+-    "image": "/trees/smuggler-charmer.png",
+-    "nodes": 20
+-  },
+-  {
+-    "id": "smuggler-gambler",
+-    "name": "Gambler",
+-    "career": "Smuggler",
+-    "kind": "specialization",
+-    "image": "/trees/smuggler-gambler.png",
+-    "nodes": 20
+-  },
+-  {
+-    "id": "smuggler-gunslinger",
+-    "name": "Gunslinger",
+-    "career": "Smuggler",
+-    "kind": "specialization",
+-    "image": "/trees/smuggler-gunslinger.png",
+-    "nodes": 20
+-  },
+-  {
+-    "id": "smuggler-pilot",
+-    "name": "Pilot",
+-    "career": "Smuggler",
+-    "kind": "specialization",
+-    "image": "/trees/smuggler-pilot.png",
+-    "nodes": 20
+-  },
+-  {
+-    "id": "smuggler-scoundrel",
+-    "name": "Scoundrel",
+-    "career": "Smuggler",
+-    "kind": "specialization",
+-    "image": "/trees/smuggler-scoundrel.png",
+-    "nodes": 20
+-  },
+-  {
+-    "id": "smuggler-thief",
+-    "name": "Thief",
+-    "career": "Smuggler",
+-    "kind": "specialization",
+-    "image": "/trees/smuggler-thief.png",
+-    "nodes": 20
+-  },
+-  {
+-    "id": "technician-cyber-tech",
+-    "name": "Cyber Tech",
+-    "career": "Technician",
+-    "kind": "specialization",
+-    "image": "/trees/technician-cyber-tech.png",
+-    "nodes": 20
+-  },
+-  {
+-    "id": "technician-droid-tech",
+-    "name": "Droid Tech",
+-    "career": "Technician",
+-    "kind": "specialization",
+-    "image": "/trees/technician-droid-tech.png",
+-    "nodes": 20
+-  },
+-  {
+-    "id": "technician-mechanic",
+-    "name": "Mechanic",
+-    "career": "Technician",
+-    "kind": "specialization",
+-    "image": "/trees/technician-mechanic.png",
+-    "nodes": 20
+-  },
+-  {
+-    "id": "technician-modder",
+-    "name": "Modder",
+-    "career": "Technician",
+-    "kind": "specialization",
+-    "image": "/trees/technician-modder.png",
+-    "nodes": 20
+-  },
+-  {
+-    "id": "technician-outlaw-tech",
+-    "name": "Outlaw Tech",
+-    "career": "Technician",
+-    "kind": "specialization",
+-    "image": "/trees/technician-outlaw-tech.png",
+-    "nodes": 20
+-  },
+-  {
+-    "id": "technician-slicer",
+-    "name": "Slicer",
+-    "career": "Technician",
+-    "kind": "specialization",
+-    "image": "/trees/technician-slicer.png",
+-    "nodes": 20
++import {customTreeMeta,type CustomTreeMeta} from "./customTreeMeta.js";
++
++// Every tree is a custom-sheet tree: talent text, costs and connectors live in client/customTreeData.ts.
++// Node numbering: specializations use 0-19 (row-major, 4 columns x 5 rows); careers use 0-17
++// (signature ability 1 = node 0, its upgrades 1-8; signature ability 2 = node 9, its upgrades 10-17).
++export type TreeMeta=CustomTreeMeta;
++export const trees:readonly TreeMeta[]=customTreeMeta;
++
++// The reference-image trees were retired. Their Edge of the Empire equivalents use identical node numbering,
++// so progress saved under an old id carries over unchanged to the id it maps to here.
++export const legacyTreeIds:Readonly<Record<string,string>>={
++  "bounty-hunter-career": "eoe-bounty-hunter-career",
++  "colonist-career": "eoe-colonist-career",
++  "explorer-career": "eoe-explorer-career",
++  "hired-gun-career": "eoe-hired-gun-career",
++  "smuggler-career": "eoe-smuggler-career",
++  "technician-career": "eoe-technician-career",
++  "bounty-hunter-assassin": "eoe-assassin",
++  "bounty-hunter-gadgeteer": "eoe-gadgeteer",
++  "bounty-hunter-martial-artist": "eoe-martial-artist",
++  "bounty-hunter-operator": "eoe-operator",
++  "bounty-hunter-skip-tracer": "eoe-skip-tracer",
++  "bounty-hunter-survivalist": "eoe-survivalist",
++  "colonist-doctor": "eoe-doctor",
++  "colonist-entrepreneur": "eoe-entrepreneur",
++  "colonist-marshal": "eoe-marshal",
++  "colonist-performer": "eoe-performer",
++  "colonist-politico": "eoe-politico",
++  "colonist-scholar": "eoe-scholar",
++  "explorer-archaeologist": "eoe-archaeologist",
++  "explorer-big-game-hunter": "eoe-big-game-hunter",
++  "explorer-driver": "eoe-driver",
++  "explorer-fringer": "eoe-fringer",
++  "explorer-scout": "eoe-scout",
++  "explorer-trader": "eoe-trader",
++  "hired-gun-bodyguard": "eoe-bodyguard",
++  "hired-gun-demolitionist": "eoe-demolitionist",
++  "hired-gun-enforcer": "eoe-enforcer",
++  "hired-gun-heavy": "eoe-heavy",
++  "hired-gun-marauder": "eoe-marauder",
++  "hired-gun-mercenary-soldier": "eoe-mercenary-soldier",
++  "smuggler-charmer": "eoe-charmer",
++  "smuggler-gambler": "eoe-gambler",
++  "smuggler-gunslinger": "eoe-gunslinger",
++  "smuggler-pilot": "eoe-pilot",
++  "smuggler-scoundrel": "eoe-scoundrel",
++  "smuggler-thief": "eoe-thief",
++  "technician-cyber-tech": "eoe-cyber-tech",
++  "technician-droid-tech": "eoe-droid-tech",
++  "technician-mechanic": "eoe-mechanic",
++  "technician-modder": "eoe-modder",
++  "technician-outlaw-tech": "eoe-outlaw-tech",
++  "technician-slicer": "eoe-slicer",
++};
++
++/** Remap legacy reference-image tree ids to their current ids, merging with any progress already saved there. */
++export function migrateTreeProgress(input:unknown):unknown{
++ if(!Array.isArray(input))return input;
++ const out:Record<string,unknown>[]=[],seen=new Map<string,{index:number;migrated:boolean}>();
++ for(const item of input){
++  if(!item||typeof item!=='object'||typeof (item as {treeId?:unknown}).treeId!=='string'){out.push(item as Record<string,unknown>);continue;}
++  const rec=item as Record<string,unknown>,id=rec.treeId as string,legacy=Object.hasOwn(legacyTreeIds,id)?legacyTreeIds[id]:undefined,treeId=legacy??id,prior=seen.get(treeId);
++  const a=prior&&out[prior.index].completed,b=rec.completed;
++  if(prior&&(prior.migrated||legacy!==undefined)&&Array.isArray(a)&&Array.isArray(b)){
++   out[prior.index]={...out[prior.index],completed:[...new Set([...a,...b])].sort((x,y)=>(x as number)-(y as number))};
++   prior.migrated=true;continue;
+   }
+-] as const;
+-// Reference-image trees come first; custom sheet trees (shared/customTreeMeta.ts) follow. Both use the same progress format.
+-export type TreeMeta={id:string;name:string;career:string;kind:'career'|'specialization';nodes:number;image?:string;game?:string;custom?:boolean};
+-export const trees:readonly TreeMeta[]=[...baseTrees,...customTreeMeta];
+-export const referenceTreeCount=baseTrees.length;
+-export const treeProgressSchema=z.array(z.object({treeId:z.string(),completed:z.array(z.number().int().min(0)).max(20)}).superRefine((p,ctx)=>{
++  if(!prior)seen.set(treeId,{index:out.length,migrated:legacy!==undefined});
++  out.push(legacy===undefined?rec:{...rec,treeId});
++ }
++ return out;
++}
++
++export const treeProgressSchema=z.preprocess(migrateTreeProgress,z.array(z.object({treeId:z.string(),completed:z.array(z.number().int().min(0)).max(20)}).superRefine((p,ctx)=>{
+  const tree=trees.find(t=>t.id===p.treeId);
+  if(!tree||p.completed.some(n=>n>=tree.nodes)||new Set(p.completed).size!==p.completed.length)ctx.addIssue({code:'custom',message:'Invalid tree or talent'});
+-})).max(trees.length).refine(a=>new Set(a.map(t=>t.treeId)).size===a.length,'Duplicate trees');
++})).max(trees.length).refine(a=>new Set(a.map(t=>t.treeId)).size===a.length,'Duplicate trees'));
+ export type TreeProgress=z.infer<typeof treeProgressSchema>;
+-// Normalized checkbox positions keep marks aligned while the reference image scales.
+-export function talentPosition(kind:string,index:number){
+- const xs=[118,515,910,1305];
+- if(kind==='specialization')return {x:xs[index%4]/1675*100,y:[303,649,996,1343,1690][Math.floor(index/4)]/2175*100};
+- const n=index%9,base=index<9?0:952;
+- return {x:xs[n===0?0:(n-1)%4]/1675*100,y:(base+(n===0?454:n<=4?729:1003))/2175*100};
+-}
+diff --git a/tests/tree-index.test.ts b/tests/tree-index.test.ts
+new file mode 100644
+index 0000000..78503e9
+--- /dev/null
++++ b/tests/tree-index.test.ts
+@@ -0,0 +1,83 @@
++import test from 'node:test';
++import assert from 'node:assert/strict';
++import {trees,legacyTreeIds,migrateTreeProgress,treeProgressSchema} from '../shared/trees';
++import {customTreeData} from '../client/customTreeData';
++import {buildSummary,groupTrees,isReachable,searchTrees,sigNode,toProgress,totals,treeXp} from '../client/treeIndex';
++
++const groups=groupTrees();
++const find=(id:string)=>trees.find(t=>t.id===id)!;
++
++test('retired reference-image tree ids map onto existing custom trees',()=>{
++  assert.equal(Object.keys(legacyTreeIds).length,42);
++  const ids=new Set(trees.map(t=>t.id));
++  for(const [old,now] of Object.entries(legacyTreeIds)){
++    assert.ok(ids.has(now),now);assert.ok(!ids.has(old),`${old} must not also be a current id`);
++    // The mapped tree has the node layout the image tree had: 18 for careers, 20 for specializations.
++    assert.equal(find(now).nodes,old.endsWith('-career')?18:20);
++  }
++  assert.equal(new Set(Object.values(legacyTreeIds)).size,42);
++});
++
++test('legacy progress migrates, merges with existing progress and still validates',()=>{
++  const out=migrateTreeProgress([{treeId:'bounty-hunter-assassin',completed:[0,5]},{treeId:'eoe-assassin',completed:[5,9]},{treeId:'eoe-smuggler-career',completed:[1]}]);
++  assert.deepEqual(out,[{treeId:'eoe-assassin',completed:[0,5,9]},{treeId:'eoe-smuggler-career',completed:[1]}]);
++  assert.deepEqual(treeProgressSchema.parse([{treeId:'smuggler-career',completed:[17]}]),[{treeId:'eoe-smuggler-career',completed:[17]}]);
++  // Migration must not hide real problems: unknown ids, out-of-range nodes and plain duplicates still fail.
++  assert.equal(treeProgressSchema.safeParse([{treeId:'nope',completed:[]}]).success,false);
++  assert.equal(treeProgressSchema.safeParse([{treeId:'smuggler-career',completed:[18]}]).success,false);
++  assert.equal(treeProgressSchema.safeParse([{treeId:'eoe-assassin',completed:[]},{treeId:'eoe-assassin',completed:[]}]).success,false);
++  assert.equal(migrateTreeProgress(undefined),undefined);
++});
++
++test('trees group into games, careers, one signature tree and specializations',()=>{
++  assert.deepEqual(groups.map(g=>g.name),['Age of Rebellion','Edge of the Empire','Force and Destiny','Universal']);
++  assert.deepEqual(groups.map(g=>g.careers.length),[6,6,6,1]);
++  for(const g of groups.slice(0,3))for(const c of g.careers){assert.ok(c.career,c.name);assert.equal(c.specs.length,6);}
++  assert.equal(groups[3].careers[0].career,undefined);assert.equal(groups[3].careers[0].specs.length,9);
++  assert.equal(groups.flatMap(g=>g.careers).reduce((n,c)=>n+c.specs.length+(c.career?1:0),0),trees.length);
++});
++
++test('talent reachability follows connectors and always allows the top row',()=>{
++  const cells=customTreeData['eoe-assassin'].cells!;
++  for(let i=0;i<4;i++)assert.equal(isReachable(cells,new Set(),i),true);
++  assert.equal(isReachable(cells,new Set(),4),false);
++  const down=cells.findIndex((c,i)=>i<16&&c.dn===1);
++  assert.equal(isReachable(cells,new Set([down]),down+4),true);
++  assert.equal(isReachable(cells,new Set(),down+4),false);
++});
++
++test('xp and totals count signature abilities, upgrades and specialization talents',()=>{
++  const career=find('eoe-smuggler-career'),spec=find('eoe-pilot'),sig=customTreeData[career.id].sig!;
++  assert.equal(treeXp(customTreeData[career.id],[sigNode(0)]),sig[0].c);
++  assert.equal(treeXp(customTreeData[career.id],[sigNode(1,2)]),sig[1].u[2].c);
++  const cells=customTreeData[spec.id].cells!;
++  assert.equal(treeXp(customTreeData[spec.id],[0,1,2]),cells[0].c+cells[1].c+cells[2].c);
++  const progress=toProgress([{treeId:career.id,completed:[sigNode(0)]},{treeId:spec.id,completed:[0,1]},{treeId:'gone',completed:[0]}]);
++  assert.deepEqual(totals(customTreeData,progress),{xp:sig[0].c+cells[0].c+cells[1].c,count:3});
++});
++
++test('build summary lists upgrades without a base ability and counts repeated talents',()=>{
++  const career=find('eoe-smuggler-career'),spec=find('eoe-pilot'),cells=customTreeData[spec.id].cells!;
++  const dup=cells.map((c,i)=>[c.n,i] as const).filter(([n],_,a)=>a.filter(([m])=>m===n).length>1);
++  const progress=toProgress([{treeId:career.id,completed:[sigNode(0,1),sigNode(1)]},{treeId:spec.id,completed:dup.length?dup.map(([,i])=>i):[0]}]);
++  const sections=buildSummary(groups,customTreeData,progress);
++  assert.equal(sections.length,1);assert.equal(sections[0].career,'Smuggler');
++  const [a,b,c]=sections[0].items;
++  assert.deepEqual(a,{kind:'signature',name:customTreeData[career.id].sig![0].n,base:false,upgrades:[customTreeData[career.id].sig![0].u[1].n]});
++  assert.equal(b.kind==='signature'&&b.base,true);
++  assert.equal(c.kind,'specialization');
++  if(c.kind==='specialization'&&dup.length)assert.ok(c.talents.some(t=>t.count>1));
++  assert.deepEqual(buildSummary(groups,customTreeData,toProgress([])),[]);
++});
++
++test('search finds talents and signature abilities, dedupes per specialization and needs 2 characters',()=>{
++  assert.deepEqual(searchTrees(groups,customTreeData,'a'),[]);
++  const hits=searchTrees(groups,customTreeData,'grit');
++  assert.ok(hits.length>0&&hits.length<=40);
++  for(const h of hits){assert.ok(find(h.treeId));assert.ok(h.node>=0&&h.node<find(h.treeId).nodes);}
++  assert.equal(new Set(hits.map(h=>`${h.treeId}:${h.name}`)).size,hits.length);
++  const sigName=customTreeData['eoe-smuggler-career'].sig![0].n;
++  const sig=searchTrees(groups,customTreeData,sigName.toUpperCase()).find(h=>h.treeId==='eoe-smuggler-career');
++  assert.ok(sig);assert.equal(sig.node,sigNode(0));assert.match(sig.where,/^Signature ability/);
++  assert.equal(searchTrees(groups,customTreeData,'e',5).length,0);assert.equal(searchTrees(groups,customTreeData,'the',5).length,5);
++});
+diff --git a/tests/trees.test.ts b/tests/trees.test.ts
+index fc44bb6..cb11f89 100644
+--- a/tests/trees.test.ts
++++ b/tests/trees.test.ts
+@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
+ import {act} from '../server/actions';
+ import {id,newCampaign} from '../server/state';
+ import {campaignSchema,memberSchema} from '../server/save-schema';
+-import {trees,treeProgressSchema,referenceTreeCount} from '../shared/trees';
++import {trees,treeProgressSchema} from '../shared/trees';
+ import {customTreeMeta} from '../shared/customTreeMeta';
+ import {customTreeData} from '../client/customTreeData';
+ test('tree progress is actor-owned, idempotent and survives saves',()=>{
+@@ -19,11 +19,11 @@ test('tree progress is actor-owned, idempotent and survives saves',()=>{
+  act(c,player,'profile:tree',{treeId,operation:'remove'});assert.deepEqual(c.members[1].trees,[]);
+ });
+ test('tree save validation rejects unknown trees, duplicate nodes and invalid indices',()=>{
+- assert.equal(referenceTreeCount,42);assert.equal(trees.length,42+customTreeMeta.length);
++ assert.equal(trees.length,customTreeMeta.length);
+  for(const p of [{treeId:'unknown',completed:[]},{treeId:trees[0].id,completed:[0,0]},{treeId:trees[0].id,completed:[99]}])assert.equal(treeProgressSchema.safeParse([p]).success,false);
+ });
+ 
+-test('custom sheet trees save, validate and export like reference trees',()=>{
++test('tree progress saves, validates and exports for every tree kind',()=>{
+  const gm=id(),player=id(),c=newCampaign('Custom',gm,'GM');c.members.push({userId:player,name:'Player',color:'#ffffff',role:'player',art:[]});
+  const spec=customTreeMeta.find(t=>t.kind==='specialization')!,career=customTreeMeta.find(t=>t.kind==='career')!;
+  assert.equal(new Set(trees.map(t=>t.id)).size,trees.length);
+-- 
+2.43.0
+

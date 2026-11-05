@@ -54,12 +54,6 @@ For internet play, terminate HTTPS at a reverse proxy, forward WebSocket upgrade
 5. **System tools:** Click colored dice to build a pool; minus buttons remove dice. Roll executes cryptographic random selection on the server. Results and individual face tooltips appear in Comms and Roll log. Opposed success/failure and advantage/threat cancel; triumph/despair and light/dark remain independent. Click a destiny side to flip a point; GM can set initial totals. Initiative sorts PC/NPC slots by successes, advantages, then PC priority; click to mark used, and advance the round to reset. Range mode shows labeled illustrative rings around your ruler origin. They are narrative guides, **not official fixed conversions** between range bands and map units.
 6. **Communication:** Send messages from Comms. GM can choose a single player for a private whisper. Private messages are removed from other users' server snapshots. Roll results post automatically.
 
-## Career & specialization trees
-
-Open **Character → Browse trees**. The library holds the 42 reference-image trees plus 135 custom-sheet trees (Age of Rebellion, Edge of the Empire, Force and Destiny and Universal: 18 career signature-ability trees and 117 specializations). Use the **Sheets** and **Game** filters to narrow the list, then **Add to my profile** and click talents to mark them purchased. Custom trees show each talent's text, XP cost, active/ranked type and connectors, and dim talents that no purchased neighbour unlocks; the check is advisory, so house rules still work. Progress is stored per player (`member.trees`), validated by the server (`profile:tree`), and included in player and campaign exports.
-
-Custom tree data lives in `shared/customTreeMeta.ts` (ids and node counts, shared with the server) and `client/customTreeData.ts` (talent text, loaded on demand). Node numbers: specializations 0-19 in row order; careers 0-8 for signature ability 1 (node 0) and its upgrades, 9-17 for ability 2 (node 9) and its upgrades. Text was read from scans by OCR, so correct any typos directly in `client/customTreeData.ts`.
-
 ## Portable save files
 
 Use **Save / export** in a table:
