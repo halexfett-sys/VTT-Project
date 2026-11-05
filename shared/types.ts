@@ -29,6 +29,7 @@ export type Member = {
   role: "gm" | "player";
   portrait?: string;
   art: string[];
+  trees?: TreeProgress;
 };
 export type Grid = {
   type: "none" | "square" | "hex";
