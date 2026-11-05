@@ -17,6 +17,7 @@ import { importSave } from "./saves";
 import SaveTools from "./SaveTools";
 import TokenAppearance from "./TokenAppearance";
 import MapCanvas, { type Tool } from "./MapCanvas";
+import TreeBrowser from "./TreeBrowser";
 const diceNames: Die[] = [
   "boost",
   "ability",
@@ -798,6 +799,7 @@ export default function App() {
                 </Field>
                 <button>Save profile</button>
               </form>
+              <TreeBrowser member={me} send={send} />
               <div className="section-heading separated">
                 <h3>Character art</h3>
               </div>
