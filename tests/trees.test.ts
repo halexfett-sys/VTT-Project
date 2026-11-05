@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {act} from '../server/actions';
 import {id,newCampaign} from '../server/state';
 import {campaignSchema,memberSchema} from '../server/save-schema';
-import {trees,treeProgressSchema,referenceTreeCount} from '../shared/trees';
+import {trees,treeProgressSchema} from '../shared/trees';
 import {customTreeMeta} from '../shared/customTreeMeta';
 import {customTreeData} from '../client/customTreeData';
 test('tree progress is actor-owned, idempotent and survives saves',()=>{
@@ -19,11 +19,11 @@ test('tree progress is actor-owned, idempotent and survives saves',()=>{
  act(c,player,'profile:tree',{treeId,operation:'remove'});assert.deepEqual(c.members[1].trees,[]);
 });
 test('tree save validation rejects unknown trees, duplicate nodes and invalid indices',()=>{
- assert.equal(referenceTreeCount,42);assert.equal(trees.length,42+customTreeMeta.length);
+ assert.equal(trees.length,customTreeMeta.length);
  for(const p of [{treeId:'unknown',completed:[]},{treeId:trees[0].id,completed:[0,0]},{treeId:trees[0].id,completed:[99]}])assert.equal(treeProgressSchema.safeParse([p]).success,false);
 });
 
-test('custom sheet trees save, validate and export like reference trees',()=>{
+test('tree progress saves, validates and exports for every tree kind',()=>{
  const gm=id(),player=id(),c=newCampaign('Custom',gm,'GM');c.members.push({userId:player,name:'Player',color:'#ffffff',role:'player',art:[]});
  const spec=customTreeMeta.find(t=>t.kind==='specialization')!,career=customTreeMeta.find(t=>t.kind==='career')!;
  assert.equal(new Set(trees.map(t=>t.id)).size,trees.length);
