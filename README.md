@@ -54,6 +54,18 @@ For internet play, terminate HTTPS at a reverse proxy, forward WebSocket upgrade
 5. **System tools:** Click colored dice to build a pool; minus buttons remove dice. Roll executes cryptographic random selection on the server. Results and individual face tooltips appear in Comms and Roll log. Opposed success/failure and advantage/threat cancel; triumph/despair and light/dark remain independent. Click a destiny side to flip a point; GM can set initial totals. Initiative sorts PC/NPC slots by successes, advantages, then PC priority; click to mark used, and advance the round to reset. Range mode shows labeled illustrative rings around your ruler origin. They are narrative guides, **not official fixed conversions** between range bands and map units.
 6. **Communication:** Send messages from Comms. GM can choose a single player for a private whisper. Private messages are removed from other users' server snapshots. Roll results post automatically.
 
+## Career & specialization trees
+
+Open **Character → Browse trees**. The tracker holds 135 trees across Age of Rebellion, Edge of the Empire, Force and Destiny and Universal: 18 career signature-ability trees and 117 specializations.
+
+- Pick a game and career on the left. The tabs show the career's **Signature Abilities** and each specialization with its purchased count (for example `3/20`).
+- Click a talent to mark it purchased; a tree joins your profile the first time you tick one of its talents. Dimmed talents are not yet reachable through a connector from a purchased talent. The check is advisory, so house rules still work. Dark headers are active talents and ▦ marks ranked talents.
+- The header shows the XP you have spent across every tree. **Search** finds talents and signature abilities by name or text and jumps straight to them. **My Build** lists everything you have purchased, grouped by game and career. **Reset** clears every tree, and **Clear this tree** clears one.
+- Progress is stored per player (`member.trees`), validated by the server (`profile:tree`), and included in player and campaign exports.
+- The earlier reference-image trees were retired. Progress saved under their ids carries over to the matching Edge of the Empire tree (same node numbering); see `legacyTreeIds` and `migrateTreeProgress` in `shared/trees.ts`.
+
+Tree ids and node counts live in `shared/customTreeMeta.ts` (shared with the server) and talent text, costs and connectors in `client/customTreeData.ts` (loaded on demand). The dialog is `client/TreeDialog.tsx` and its pure logic (grouping, reachability, XP, build summary, search) is in `client/treeIndex.ts`. Node numbers: specializations 0-19 in row order; careers 0-8 for signature ability 1 (node 0) and its upgrades, 9-17 for ability 2 (node 9) and its upgrades. Text was read from scans by OCR, so correct any typos directly in `client/customTreeData.ts`.
+
 ## Portable save files
 
 Use **Save / export** in a table:
@@ -148,8 +160,8 @@ Open the Character tab and upload an OggDude Character XML (up to 5 MB). Review 
 Each member edits their own Character Data; everyone at the table can view it. Data synchronizes through `profile:update` and is included in player and campaign exports/imports. XML is parsed locally; only the reviewed fields are sent to the server. This imports the displayed fields, not the entire OggDude talent/equipment database.
 
 ## Career and specialization trees
-Open Character → Browse trees to search the 42 supplied Edge of the Empire reference sheets by name or career. Add a tree to your profile, then click its checkboxes to mark or unmark talents. My trees filters your collection; zoom enlarges the original reference image. Removing a tree clears its marks after confirmation. This is a reference tracker, not a prerequisite or XP validator.
+Open Character → Browse trees to work through the 135 career and specialization trees (described above). Click a talent to mark or unmark it; the tree joins your profile on your first click. Clear this tree and Reset remove marks after confirmation. This is a reference tracker, not a prerequisite or XP validator.
 
 Progress persists with your campaign membership and is included in player, table, and campaign exports/imports. Export your player data to carry it into another table. Existing saves without trees continue to work.
 
-Socket event `profile:tree`: `{treeId, operation: "add" | "remove" | "mark", node?, completed?}`. Mark uses a zero-based node and an explicit boolean for safe retries. The server validates the catalog and node bounds and only edits the acting member. Member data adds optional `trees: [{treeId, completed: number[]}]`; catalog and image coordinates live in `shared/trees.ts`, with supplied reference images in `public/trees`.
+Socket event `profile:tree`: `{treeId, operation: "add" | "remove" | "mark", node?, completed?}`. Mark uses a zero-based node and an explicit boolean for safe retries. The server validates the catalog and node bounds and only edits the acting member. Member data adds optional `trees: [{treeId, completed: number[]}]`; the catalog lives in `shared/trees.ts` and `shared/customTreeMeta.ts`. Ids from the retired reference-image trees are remapped to their current ids whenever saved progress is parsed (`migrateTreeProgress`).
