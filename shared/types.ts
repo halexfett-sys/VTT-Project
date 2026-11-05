@@ -1,3 +1,4 @@
+import type { TreeProgress } from "./trees.js";
 export type Die =
   | "boost"
   | "setback"
