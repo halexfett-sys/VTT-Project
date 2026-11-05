@@ -1,4 +1,5 @@
 import {z} from 'zod';
+import {treeProgressSchema} from '../shared/trees.js';
 const uuid=z.string().uuid(), n=z.number().finite(), color=z.string().regex(/^#[0-9a-f]{6}$/i), name=z.string().min(1).max(80);
 export const memberSchema=z.object({userId:uuid,name,color,role:z.enum(['gm','player']),portrait:uuid.optional(),art:z.array(uuid).max(1000)});
 export const assetSchema=z.object({id:uuid,ownerId:uuid,kind:z.enum(['map','token','art','handout']),name:z.string().max(80),width:n.int().min(1).max(20000),height:n.int().min(1).max(20000)});
