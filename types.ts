@@ -1,4 +1,3 @@
-import type { TreeProgress } from "./trees.js";
 export type Die =
   | "boost"
   | "setback"
@@ -29,7 +28,6 @@ export type Member = {
   role: "gm" | "player";
   portrait?: string;
   art: string[];
-  trees?: TreeProgress;
 };
 export type Grid = {
   type: "none" | "square" | "hex";
@@ -134,4 +132,14 @@ export const defaultSheet = (): Sheet => ({
   defense: 0,
   credits: 0,
   notes: "",
+}
+
+export interface Member {
+  userId: string;
+  name: string;
+  color: string;
+  role: "gm" | "player";
+  art: string[];
+  portrait?: string;
+  trees?: Tree[]; // Add the missing property type here
 });
