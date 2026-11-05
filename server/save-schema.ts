@@ -1,7 +1,7 @@
 import {z} from 'zod';
 import {treeProgressSchema} from '../shared/trees.js';
 const uuid=z.string().uuid(), n=z.number().finite(), color=z.string().regex(/^#[0-9a-f]{6}$/i), name=z.string().min(1).max(80);
-export const memberSchema=z.object({userId:uuid,name,color,role:z.enum(['gm','player']),portrait:uuid.optional(),art:z.array(uuid).max(1000)});
+export const memberSchema=z.object({userId:uuid,name,color,role:z.enum(['gm','player']),portrait:uuid.optional(),  art:z.array(uuid).max(1000),trees:treeProgressSchema.optional()});
 export const assetSchema=z.object({id:uuid,ownerId:uuid,kind:z.enum(['map','token','art','handout']),name:z.string().max(80),width:n.int().min(1).max(20000),height:n.int().min(1).max(20000)});
 export const tokenSchema=z.object({id:uuid,mapId:uuid,ownerId:uuid,name,assetId:uuid.optional(),x:n.min(0).max(20000),y:n.min(0).max(20000),size:n.min(.5).max(10),rotation:n.min(-360).max(360),status:z.string().max(30),hidden:z.boolean(),z:n,appearance:z.object({background:color,textColor:color,outlineColor:color,outlineWidth:n.min(0).max(12),shape:z.enum(['circle','square']),imageFit:z.enum(['cover','contain'])}).optional(),sheet:z.object({wounds:n.min(0),woundThreshold:n.min(0),strain:n.min(0),strainThreshold:n.min(0),soak:n.min(0),defense:n.min(0),credits:n.min(0),notes:z.string().max(10000)})});
 const symbols=z.object({success:n.min(0),failure:n.min(0),advantage:n.min(0),threat:n.min(0),triumph:n.min(0),despair:n.min(0),light:n.min(0),dark:n.min(0)});
