@@ -1,3 +1,4 @@
+import { trees } from "../shared/trees.js";
 import { randomInt } from "node:crypto";
 import { z } from "zod";
 import { rollPool } from "../shared/dice.js";
@@ -254,6 +255,37 @@ export function act(
       Object.assign(m, p);
       break;
     }
+        case "profile:tree": {
+        const p = z
+          .object({
+            treeId: z.string().max(100),
+            operation: z.enum(["add", "remove", "mark"]),
+            node: z.number().int().min(0).optional(),
+            completed: z.boolean().optional(),
+          })
+          .parse(input);
+        const tree = trees.find((t) => t.id === p.treeId);
+        if (!tree) throw new Error("Unknown tree");
+        const list = (m.trees ??= []);
+        let entry = list.find((t) => t.treeId === p.treeId);
+        if (p.operation === "remove") {
+          m.trees = list.filter((t) => t.treeId !== p.treeId);
+          break;
+        }
+        if (!entry) {
+          entry = { treeId: p.treeId, completed: [] };
+          list.push(entry);
+        }
+        if (p.operation === "mark") {
+          if (p.node === undefined || p.node >= tree.nodes || p.completed === undefined)
+            throw new Error("Invalid talent");
+          const done = new Set(entry.completed);
+          if (p.completed) done.add(p.node);
+          else done.delete(p.node);
+          entry.completed = [...done].sort((a, b) => a - b);
+        }
+        break;
+      }
     case "handout:show": {
       gm();
       const p = z.object({ assetId: key, title: name }).parse(input);
@@ -373,6 +405,7 @@ export const events = [
   "token:duplicate",
   "token:layer",
   "profile:update",
+  "profile:tree",
   "handout:show",
   "handout:close",
   "dice:roll",
