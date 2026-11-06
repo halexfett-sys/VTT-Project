@@ -81,7 +81,8 @@ export default function MapCanvas({
   }, [signature]);
   useEffect(() => {
     const fit = () => {
-      const box = host.current!.getBoundingClientRect();
+      if (!host.current) return; // table closed (kicked / left) while a resize was pending
+      const box = host.current.getBoundingClientRect();
       const z = Math.max(
         0.08,
         Math.min(
@@ -121,7 +122,11 @@ export default function MapCanvas({
       const { state: s, userId, selected } = current.current,
         m = s.maps.find((m) => m.id === s.activeMapId)!;
       const isGM = s.members.find((m) => m.userId === userId)?.role === "gm";
-      const rect = host.current!.getBoundingClientRect(),
+      if (!host.current) {
+        frame = requestAnimationFrame(draw);
+        return;
+      }
+      const rect = host.current.getBoundingClientRect(),
         dpr = window.devicePixelRatio || 1;
       if (
         el.width !== Math.round(rect.width * dpr) ||

@@ -1838,3 +1838,43 @@ h1,h2,h3,.brand {font-family:Starjhol,SWEuro,sans-serif;letter-spacing:.04em;}
 .ct-cell.dn::after{content:"";position:absolute;left:calc(50% - 6px);top:100%;width:12px;height:28px;background:#6d7f8e}.ct-cell.rt::before{content:"";position:absolute;left:100%;top:66px;width:28px;height:10px;background:#6d7f8e}
 .ct-sig{margin-bottom:26px;padding:12px;border:1px solid #344858;border-radius:8px}.ct-sig-main{margin-bottom:16px}.ct-cell.wide{width:100%;min-height:0}
 @media(max-width:750px){.ct-body{padding:8px}}
+
+/* ===== Table membership, library delete, character tab, destiny tokens ===== */
+.light-orb, .dark-orb {
+  width: 58px; height: 58px; border-radius: 0; border: 0; box-shadow: none;
+  background-color: transparent; background-repeat: no-repeat; background-size: contain; background-position: center;
+  font-size: 22px; font-weight: 700;
+}
+.light-orb { color: #1d2a33; text-shadow: 0 0 3px #fff, 0 1px 2px #fff; filter: drop-shadow(0 0 8px #d9d3b94d); }
+.dark-orb { color: #fff; text-shadow: 0 1px 3px #000, 0 0 2px #000; filter: drop-shadow(0 0 8px #a01e2266); }
+.asset-tile { position: relative; min-width: 0; }
+.asset-tile > button:first-child, .asset-tile > a { display: block; width: 100%; }
+.asset-delete {
+  position: absolute; top: 3px; right: 3px; width: 22px; height: 22px; padding: 0 !important;
+  display: grid; place-items: center; border-radius: 50%; font-size: 11px; line-height: 1;
+  background: #3a1b1b; border: 1px solid #c16c61; color: #ffd9d3; opacity: .85;
+}
+.asset-delete:hover, .asset-delete:focus-visible { opacity: 1; background: #874039; }
+.crew-manage { margin-top: 8px; }
+.crew-manage summary { cursor: pointer; font-size: 11px; color: var(--muted); letter-spacing: .5px; }
+.crew-row { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+.crew-row > span { width: 26px; height: 26px; border: 2px solid; border-radius: 50%; display: grid; place-items: center; font-size: 10px; flex: none; }
+.crew-row em { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-style: normal; }
+.crew-row button { padding: 4px 9px; font-size: 11px; }
+.import-notes { margin: 8px 0; padding-left: 18px; color: var(--gold); font-size: 12px; }
+.form-error { color: #ff9d92; margin: 6px 0; }
+.pool-picked { margin: 6px 0; padding: 6px 8px; border: 1px solid var(--teal); border-radius: 6px; color: var(--teal); font-size: 12px; }
+.skill-group h4 { margin: 14px 0 4px; font-size: 11px; letter-spacing: 1.2px; text-transform: uppercase; color: var(--muted); }
+.skill-row { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+.skill-pick { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 5px 8px; text-align: left; }
+.skill-pick:hover { border-color: var(--teal); }
+.skill-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.skill-name b { color: var(--gold); }
+.skill-name small { color: var(--muted); font-size: 9px; }
+.skill-dice { display: inline-flex; gap: 2px; flex: none; }
+.skill-dice img { width: 16px; height: 16px; object-fit: contain; }
+.skill-rank { display: inline-flex; align-items: center; gap: 3px; flex: none; }
+.skill-rank button { width: 22px; height: 22px; padding: 0; display: grid; place-items: center; }
+.skill-rank output { min-width: 14px; text-align: center; }
+.skill-rank input[type=checkbox] { margin-left: 3px; }
+.save-bar { position: sticky; bottom: 0; padding: 8px 0; background: linear-gradient(transparent, var(--panel) 30%); display: grid; gap: 6px; }

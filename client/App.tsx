@@ -17,7 +17,8 @@ import { importSave } from "./saves";
 import SaveTools from "./SaveTools";
 import TokenAppearance from "./TokenAppearance";
 import MapCanvas, { type Tool } from "./MapCanvas";
-import TreeBrowser from "./TreeBrowser";
+import CharacterTab from "./CharacterTab";
+import NumberField from "./NumberField";
 const diceNames: Die[] = [
   "boost",
   "ability",
@@ -113,6 +114,8 @@ export default function App() {
     [sheetOpen, setSheetOpen] = useState(false),
     [inviteOpen, setInviteOpen] = useState(false);
   const [manageScenes, setManageScenes] = useState(false);
+  const [newSize, setNewSize] = useState(1);
+  const leaving = useRef(false);
   const [sceneSelection, setSceneSelection] = useState<string[]>([]);
   const [confirmScenes, setConfirmScenes] = useState(false);
   const [deletingScenes, setDeletingScenes] = useState(false);
@@ -167,13 +170,21 @@ export default function App() {
     s.on("connect", () => {
       actions.current?.close();actions.current=makeQueue();
       s.emit("room:join", { roomId: room }, (r: any) => {
-        if (r.error) setError(r.error);
-        else setConnected(true);
+        if (r.error) {
+          setError(r.error);
+          if (r.error === "Campaign access denied") leave();
+        } else setConnected(true);
       });
     });
     s.on("disconnect", () => {setConnected(false);actions.current?.close();});
     s.on("connect_error", (e) => setError(e.message));
     s.on("state", (c: Campaign) => setState(c));
+    // The GM removed this player (or they left on another device): return to the campaign list.
+    s.on("kicked", () => {
+      if (!leaving.current) setError("You are no longer part of this table.");
+      leaving.current = false;
+      leave();
+    });
     s.connect();
     return () => {
       actions.current?.close();actions.current=null;
@@ -205,6 +216,32 @@ export default function App() {
     setRoom("");
     setSelected("");
     history.replaceState({}, "", "/");
+  };
+  const deleteAsset = (a: Asset) => {
+    if (
+      !window.confirm(
+        `Delete "${a.name}" from the library? Tokens already on the map using it become plain markers.`,
+      )
+    )
+      return;
+    send("asset:delete", { assetId: a.id });
+  };
+  const leaveTable = () => {
+    if (!window.confirm("Leave this table? You can rejoin later with the invite code.")) return;
+    leaving.current = true;
+    send("member:leave", {}, (ok) => {
+      if (ok) leave();
+      else leaving.current = false;
+    });
+  };
+  const removePlayer = (m: { userId: string; name: string }) => {
+    if (
+      !window.confirm(
+        `Remove ${m.name} from the table? Their tokens will be given to you. They can rejoin with the invite code.`,
+      )
+    )
+      return;
+    send("member:remove", { userId: m.userId });
   };
   const doUpload = (kind: string, file: File, after?: (a: Asset) => void) =>
     run(async () => {
@@ -506,7 +543,7 @@ export default function App() {
       </header>
       <aside className="left-panel">
         <nav className="panel-tabs">
-          {["scenes", "tokens", "profile"].map((t) => (
+          {["scenes", "tokens", "profile", "character"].map((t) => (
             <button
               className={leftTab === t ? "active" : ""}
               key={t}
@@ -592,14 +629,12 @@ export default function App() {
                   </Field>
                   <div className="two-col">
                     <Field label="Size (px)">
-                      <input
-                        type="number"
+                      <NumberField
+                        label="Grid size in pixels"
                         min={16}
                         max={256}
                         value={map.grid.size}
-                        onChange={(e) =>
-                          updateGrid({ size: Number(e.target.value) })
-                        }
+                        onCommit={(v) => updateGrid({ size: v })}
                       />
                     </Field>
                     <Field label="Color">
@@ -616,14 +651,12 @@ export default function App() {
                         key={k}
                         label={k === "offsetX" ? "Offset X" : "Offset Y"}
                       >
-                        <input
-                          type="number"
+                        <NumberField
+                          label={k === "offsetX" ? "Grid offset X in pixels" : "Grid offset Y in pixels"}
                           value={map.grid[k]}
                           min={-1000}
                           max={1000}
-                          onChange={(e) =>
-                            updateGrid({ [k]: Number(e.target.value) })
-                          }
+                          onCommit={(v) => updateGrid({ [k]: v })}
                         />
                       </Field>
                     ))}
@@ -651,6 +684,13 @@ export default function App() {
                       step={10}
                       value={brush}
                       onChange={(e) => setBrush(+e.target.value)}
+                    />
+                    <NumberField
+                      label="Brush size in pixels"
+                      min={20}
+                      max={600}
+                      value={brush}
+                      onCommit={setBrush}
                     />
                   </Field>
                   <button
@@ -701,7 +741,7 @@ export default function App() {
                 onSubmit={(e) => {
                   e.preventDefault();
                   const f = new FormData(e.currentTarget);
-                  send("token:create", { name: f.get("name") });
+                  send("token:create", { name: f.get("name"), size: newSize });
                   e.currentTarget.reset();
                 }}
               >
@@ -714,6 +754,25 @@ export default function App() {
                 />
                 <button className="full">+ Create marker token</button>
               </form>
+              <Field label={`New token size · ${newSize} grid ${newSize === 1 ? "square" : "squares"}`}>
+                <input
+                  type="range"
+                  min={0.5}
+                  max={10}
+                  step={0.5}
+                  value={newSize}
+                  aria-label="New token size slider"
+                  onChange={(e) => setNewSize(+e.target.value)}
+                />
+                <NumberField
+                  label="New token size in grid squares"
+                  decimals
+                  min={0.5}
+                  max={10}
+                  value={newSize}
+                  onCommit={setNewSize}
+                />
+              </Field>
               <div className="section-heading separated">
                 <h3>Token library</h3>
               </div>
@@ -728,20 +787,30 @@ export default function App() {
                     (a) => a.kind === "token" && (gm || a.ownerId === user.id),
                   )
                   .map((a) => (
-                    <button
-                      title={`Place ${a.name}`}
-                      key={a.id}
-                      onClick={() =>
-                        send("token:create", {
-                          name: a.name.replace(/\.[^.]+$/, ""),
-                          assetId: a.id,
-                        })
-                      }
-                    >
-                      <img src={assetUrl(room, a.id)} alt={a.name} />
-                      <span>{a.name}</span>
-                      <small>+ Place</small>
-                    </button>
+                    <div className="asset-tile" key={a.id}>
+                      <button
+                        title={`Place ${a.name} at ${newSize} grid ${newSize === 1 ? "square" : "squares"}`}
+                        onClick={() =>
+                          send("token:create", {
+                            name: a.name.replace(/\.[^.]+$/, ""),
+                            assetId: a.id,
+                            size: newSize,
+                          })
+                        }
+                      >
+                        <img src={assetUrl(room, a.id)} alt={a.name} />
+                        <span>{a.name}</span>
+                        <small>+ Place</small>
+                      </button>
+                      <button
+                        className="asset-delete"
+                        aria-label={`Delete ${a.name} from the library`}
+                        title="Delete from library"
+                        onClick={() => deleteAsset(a)}
+                      >
+                        ✕
+                      </button>
+                    </div>
                   ))}
               </div>
               <p className="hint">
@@ -775,6 +844,17 @@ export default function App() {
                   )
                 }
               />
+              {me.portrait && (
+                <button
+                  className="full"
+                  onClick={() => {
+                    const a = state.assets.find((x) => x.id === me.portrait);
+                    if (a) deleteAsset(a);
+                  }}
+                >
+                  Delete portrait
+                </button>
+              )}
               <form
                 className="stack"
                 key={me.userId}
@@ -799,7 +879,6 @@ export default function App() {
                 </Field>
                 <button>Save profile</button>
               </form>
-              <TreeBrowser member={me} send={send} />
               <div className="section-heading separated">
                 <h3>Character art</h3>
               </div>
@@ -814,14 +893,23 @@ export default function App() {
               />
               <div className="asset-grid">
                 {myArt.map((a) => (
-                  <a
-                    href={assetUrl(room, a.id)}
-                    target="_blank"
-                    rel="noreferrer"
-                    key={a.id}
-                  >
-                    <img src={assetUrl(room, a.id)} alt={a.name} />
-                  </a>
+                  <div className="asset-tile" key={a.id}>
+                    <a
+                      href={assetUrl(room, a.id)}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      <img src={assetUrl(room, a.id)} alt={a.name} />
+                    </a>
+                    <button
+                      className="asset-delete"
+                      aria-label={`Delete ${a.name} from the library`}
+                      title="Delete from library"
+                      onClick={() => deleteAsset(a)}
+                    >
+                      ✕
+                    </button>
+                  </div>
                 ))}
               </div>
               {gm && (
@@ -853,7 +941,29 @@ export default function App() {
                     ))}
                 </>
               )}
+              {!gm && (
+                <>
+                  <div className="section-heading separated">
+                    <h3>Leave this table</h3>
+                  </div>
+                  <p className="hint">
+                    You will be removed from the crew and your tokens go to the GM. You can rejoin with the
+                    invite code.
+                  </p>
+                  <button className="danger-button full" onClick={leaveTable}>
+                    Leave table
+                  </button>
+                </>
+              )}
             </>
+          )}
+          {leftTab === "character" && (
+            <CharacterTab
+              member={me}
+              send={send}
+              setPool={setPool}
+              connected={connected}
+            />
           )}
         </div>
         <div className="crew-strip">
@@ -870,6 +980,26 @@ export default function App() {
             ))}
             <small>{state.members.length} members</small>
           </div>
+          {gm && state.members.length > 1 && (
+            <details className="crew-manage">
+              <summary>Manage players</summary>
+              {state.members
+                .filter((m) => m.role !== "gm")
+                .map((m) => (
+                  <div className="crew-row" key={m.userId}>
+                    <span style={{ borderColor: m.color }}>{m.name.slice(0, 2)}</span>
+                    <em>{m.name}</em>
+                    <button
+                      className="danger-button"
+                      aria-label={`Remove ${m.name} from the table`}
+                      onClick={() => removePlayer(m)}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))}
+            </details>
+          )}
         </div>
       </aside>
       <main className="map-area">
@@ -907,7 +1037,7 @@ export default function App() {
                 ? "RANGE BANDS"
                 : tool.toUpperCase()}
           </span>
-          {tool === "range" && <label className="range-base">Base radius (map px)<input aria-label="Range band base radius" type="number" min={8} max={2000} value={rangeBase} onChange={e=>setRangeBase(Math.max(8,Math.min(2000,Number(e.target.value)||8)))} /></label>}
+          {tool === "range" && <label className="range-base">Base radius (map px)<NumberField label="Range band base radius in pixels" min={8} max={2000} value={rangeBase} onCommit={setRangeBase} /></label>}
           {token && (
             <button className="inspect" onClick={() => setSheetOpen(true)}>
               ◈ {token.name} · Rename / edit
@@ -937,7 +1067,7 @@ export default function App() {
               onClick={() => send("destiny:flip", { side: "light" })}
               title="Flip a light point to dark"
             >
-              <span className="light-orb">{state.destiny.light}</span>
+              <span className="light-orb" style={{ backgroundImage: "url(/destiny/lightside.png)" }}>{state.destiny.light}</span>
               <span>LIGHT SIDE</span>
             </button>
             <span className="muted">⇄</span>
@@ -945,7 +1075,7 @@ export default function App() {
               onClick={() => send("destiny:flip", { side: "dark" })}
               title="Flip a dark point to light"
             >
-              <span className="dark-orb">{state.destiny.dark}</span>
+              <span className="dark-orb" style={{ backgroundImage: "url(/destiny/darkside.png)" }}>{state.destiny.dark}</span>
               <span>DARK SIDE</span>
             </button>
           </div>
