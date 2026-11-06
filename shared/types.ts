@@ -1,3 +1,4 @@
+import type { Character } from "./character.js";
 import type { TreeProgress } from "./trees.js";
 export type Die =
   | "boost"
@@ -30,6 +31,7 @@ export type Member = {
   portrait?: string;
   art: string[];
   trees?: TreeProgress;
+  character?: Character;
 };
 export type Grid = {
   type: "none" | "square" | "hex";
