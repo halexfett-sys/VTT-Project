@@ -1,3 +1,4 @@
+import { characterSchema } from "../shared/character.js";
 import { trees } from "../shared/trees.js";
 import { randomInt } from "node:crypto";
 import { z } from "zod";
@@ -19,6 +20,13 @@ const sheet = z.object({
   credits: num.min(0).max(1e12),
   notes: z.string().max(10000),
 });
+/** Remove a member and hand any tokens they controlled to the first GM so nothing is orphaned. */
+export function removeMember(c: Campaign, userId: string) {
+  const heir = c.members.find((x) => x.role === "gm" && x.userId !== userId);
+  if (!heir) throw new Error("No GM to take over this player's tokens");
+  for (const t of c.tokens) if (t.ownerId === userId) t.ownerId = heir.userId;
+  c.members = c.members.filter((x) => x.userId !== userId);
+}
 export function act(
   c: Campaign,
   userId: string,
@@ -121,7 +129,12 @@ export function act(
     }
     case "token:create": {
       const p = z
-        .object({ name, assetId: key.optional(), ownerId: key.optional() })
+        .object({
+          name,
+          assetId: key.optional(),
+          ownerId: key.optional(),
+          size: num.min(0.5).max(10).optional(),
+        })
         .parse(input);
       if (p.assetId) asset(p.assetId);
       const ownerId = m.role === "gm" ? p.ownerId || userId : userId;
@@ -139,7 +152,7 @@ export function act(
           320,
           c.maps.find((m) => m.id === c.activeMapId)!.height / 2,
         ),
-        size: 1,
+        size: p.size ?? 1,
         rotation: 0,
         status: "",
         hidden: false,
@@ -248,6 +261,7 @@ export function act(
           color: color.optional(),
           portrait: key.optional(),
           art: z.array(key).max(30).optional(),
+          character: characterSchema.optional(),
         })
         .parse(input);
       if (p.portrait) asset(p.portrait);
@@ -286,6 +300,37 @@ export function act(
         }
         break;
       }
+    case "asset:delete": {
+      // Library clean-up: token images and character art only. Scenes are managed with Manage scenes.
+      const p = z.object({ assetId: key }).parse(input);
+      const a = asset(p.assetId);
+      if (a.kind !== "token" && a.kind !== "art")
+        throw new Error("Only token and character images can be deleted here");
+      c.assets = c.assets.filter((x) => x.id !== a.id);
+      // Tokens already on a map keep their place but fall back to a plain marker.
+      for (const t of c.tokens) if (t.assetId === a.id) delete t.assetId;
+      for (const mem of c.members) {
+        if (mem.portrait === a.id) delete mem.portrait;
+        mem.art = mem.art.filter((x) => x !== a.id);
+      }
+      break;
+    }
+    case "member:leave": {
+      // A player permanently leaves the table. Their tokens go to the GM.
+      if (m.role === "gm" && c.members.filter((x) => x.role === "gm").length < 2)
+        throw new Error("The GM cannot leave their own table");
+      removeMember(c, m.userId);
+      break;
+    }
+    case "member:remove": {
+      gm();
+      const p = z.object({ userId: key }).parse(input);
+      const target = c.members.find((x) => x.userId === p.userId);
+      if (!target) throw new Error("That player is not at this table");
+      if (target.role === "gm") throw new Error("A GM cannot be removed");
+      removeMember(c, target.userId);
+      break;
+    }
     case "handout:show": {
       gm();
       const p = z.object({ assetId: key, title: name }).parse(input);
@@ -406,6 +451,9 @@ export const events = [
   "token:layer",
   "profile:update",
   "profile:tree",
+  "asset:delete",
+  "member:leave",
+  "member:remove",
   "handout:show",
   "handout:close",
   "dice:roll",

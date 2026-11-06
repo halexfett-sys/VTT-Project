@@ -109,12 +109,14 @@ export function createCloudApp(
   });
   function broadcast(c: Campaign) {
     for (const s of io.sockets.sockets.values())
-      if (
-        s.data.campaignId === c.id &&
-        c.members.some((m) => m.userId === s.data.user.id)
-      ) {
-        s.emit("state", viewFor(c, s.data.user.id));
-        s.data.revision = c.revision;
+      if (s.data.campaignId === c.id) {
+        if (c.members.some((m) => m.userId === s.data.user.id)) {
+          s.emit("state", viewFor(c, s.data.user.id));
+          s.data.revision = c.revision;
+        } else {
+          s.data.campaignId = undefined;
+          s.emit("kicked");
+        }
       }
   }
   app.use(express.json({ limit: "256kb" }));
@@ -449,7 +451,9 @@ export function createCloudApp(
           s.data.revision = c.revision;
           s.emit("state", viewFor(c, s.data.user.id));
         }
-      } catch {
+      } catch (e) {
+        // Removed on another server instance: say so before closing, so the app returns to the lobby.
+        if ((e as Error).message === "Campaign access denied") s.emit("kicked");
         s.disconnect(true);
       } finally {
         polling = false;

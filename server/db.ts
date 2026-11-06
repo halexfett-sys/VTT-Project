@@ -34,6 +34,14 @@ export function openDatabase(root: string) {
             c.id,
             m.userId,
           );
+        const keep = new Set(c.members.map((m) => m.userId));
+        for (const row of db
+          .prepare("SELECT user_id FROM memberships WHERE campaign_id=?")
+          .all(c.id) as { user_id: string }[])
+          if (!keep.has(row.user_id))
+            db.prepare(
+              "DELETE FROM memberships WHERE campaign_id=? AND user_id=?",
+            ).run(c.id, row.user_id);
         db.exec("COMMIT");
       } catch (e) {
         db.exec("ROLLBACK");

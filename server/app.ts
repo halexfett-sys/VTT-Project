@@ -79,8 +79,15 @@ export function createApp(root = process.env.DATA_DIR || "data") {
   });
   function broadcast(c: Campaign) {
     for (const socket of io.sockets.sockets.values())
-      if (socket.data.campaignId === c.id)
-        socket.emit("state", viewFor(c, socket.data.user.id));
+      if (socket.data.campaignId === c.id) {
+        if (c.members.some((m) => m.userId === socket.data.user.id))
+          socket.emit("state", viewFor(c, socket.data.user.id));
+        else {
+          // Removed from (or left) the table: tell the browser and stop sending table data.
+          socket.data.campaignId = undefined;
+          socket.emit("kicked");
+        }
+      }
   }
   app.post('/api/guest', rateLimit({windowMs:60000,limit:30}), (req:any,res)=>{
     const name=z.string().trim().min(1).max(80).parse(req.body.name);
