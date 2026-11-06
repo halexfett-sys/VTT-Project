@@ -36,11 +36,13 @@ export default function CharacterTab({
   member,
   send,
   setPool,
+  setPoolLabel,
   connected,
 }: {
   member: Member;
   send: Send;
   setPool: (f: (p: Pool) => Pool) => void;
+  setPoolLabel: (s: string) => void;
   connected: boolean;
 }) {
   const saved = member.character ?? emptyCharacter();
@@ -49,7 +51,23 @@ export default function CharacterTab({
   const [notes, setNotes] = useState<string[]>([]);
   const [error, setError] = useState("");
   const [picked, setPicked] = useState("");
-  const [hideUntrained, setHideUntrained] = useState(false);
+  // "Hide untrained skills" is remembered on this device until the player unchecks it.
+  const [hideUntrained, setHideUntrainedState] = useState(() => {
+    try {
+      return localStorage.getItem("vtt.hideUntrainedSkills") === "1";
+    } catch {
+      return false;
+    }
+  });
+  const setHideUntrained = (v: boolean) => {
+    setHideUntrainedState(v);
+    try {
+      if (v) localStorage.setItem("vtt.hideUntrainedSkills", "1");
+      else localStorage.removeItem("vtt.hideUntrainedSkills");
+    } catch {
+      /* storage unavailable: the choice just lasts for this visit */
+    }
+  };
   const fileRef = useRef<HTMLInputElement>(null);
   // Follow server changes (another tab, a reconnect) unless there are unsaved edits.
   useEffect(() => {
@@ -86,8 +104,26 @@ export default function CharacterTab({
       if (ok) setDirty(false);
     });
   };
+  const removeCharacter = () => {
+    if (
+      !window.confirm(
+        "Remove this character sheet? Your stats and skills are cleared so you can import a different character. Specialization tree progress is kept.",
+      )
+    )
+      return;
+    send("profile:update", { character: null }, (ok) => {
+      if (ok) {
+        setDraft(emptyCharacter());
+        setDirty(false);
+        setNotes([]);
+        setPicked("");
+        setPoolLabel("");
+      }
+    });
+  };
   const choose = (s: CharSkill) => {
     setPool((p) => applySkillToPool(p, draft, s));
+    setPoolLabel(`${s.name} check`);
     const d = skillDice(draft, s);
     setPicked(
       `${s.name}: ${d.proficiency} proficiency, ${d.ability} ability added to the dice pool`,
@@ -149,6 +185,11 @@ export default function CharacterTab({
           if (f) onFile(f);
         }}
       />
+      {(member.character || dirty) && (
+        <button className="danger-button full" onClick={removeCharacter} disabled={!connected || !member.character}>
+          Remove character sheet
+        </button>
+      )}
       <p className="hint">Exported from OggDude’s Character Generator · up to 5 MB · read in your browser.</p>
       {error && <p className="form-error" role="alert">{error}</p>}
       {notes.length > 0 && (

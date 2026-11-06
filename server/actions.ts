@@ -213,8 +213,16 @@ export function act(
               outlineWidth: num.min(0).max(12),
               shape: z.enum(["circle", "square"]),
               imageFit: z.enum(["cover", "contain"]),
+              imageScale: num.min(0.25).max(4).optional(),
+              imageX: num.min(-1).max(1).optional(),
+              imageY: num.min(-1).max(1).optional(),
+              backImageScale: num.min(0.25).max(4).optional(),
+              backImageX: num.min(-1).max(1).optional(),
+              backImageY: num.min(-1).max(1).optional(),
             })
             .optional(),
+          backAssetId: key.nullable().optional(),
+          flipped: z.boolean().optional(),
         })
         .parse(input);
       const t = token(p.id);
@@ -222,10 +230,20 @@ export function act(
       if (p.ownerId && !c.members.some((m) => m.userId === p.ownerId))
         throw new Error("Unknown owner");
       if (p.assetId && p.assetId !== t.assetId) asset(p.assetId);
-      const { assetId, ...updates } = p;
+      if (p.backAssetId && p.backAssetId !== t.backAssetId) asset(p.backAssetId);
+      const { assetId, backAssetId, ...updates } = p;
       Object.assign(t, updates);
       if (assetId === null) delete t.assetId;
       else if (assetId !== undefined) t.assetId = assetId;
+      if (backAssetId === null) delete t.backAssetId;
+      else if (backAssetId !== undefined) t.backAssetId = backAssetId;
+      break;
+    }
+    case "token:flip": {
+      // Show the other side of the token. With no back image the same picture is shown on both sides.
+      const p = z.object({ id: key }).parse(input);
+      const t = token(p.id);
+      t.flipped = !t.flipped;
       break;
     }
     case "token:delete": {
@@ -261,12 +279,15 @@ export function act(
           color: color.optional(),
           portrait: key.optional(),
           art: z.array(key).max(30).optional(),
-          character: characterSchema.optional(),
+          character: characterSchema.nullable().optional(),
         })
         .parse(input);
       if (p.portrait) asset(p.portrait);
       p.art?.forEach(asset);
-      Object.assign(m, p);
+      const { character, ...rest } = p;
+      Object.assign(m, rest);
+      if (character === null) delete m.character; // player removed their character sheet
+      else if (character) m.character = character;
       break;
     }
         case "profile:tree": {
@@ -308,7 +329,10 @@ export function act(
         throw new Error("Only token and character images can be deleted here");
       c.assets = c.assets.filter((x) => x.id !== a.id);
       // Tokens already on a map keep their place but fall back to a plain marker.
-      for (const t of c.tokens) if (t.assetId === a.id) delete t.assetId;
+      for (const t of c.tokens) {
+        if (t.assetId === a.id) delete t.assetId;
+        if (t.backAssetId === a.id) delete t.backAssetId;
+      }
       for (const mem of c.members) {
         if (mem.portrait === a.id) delete mem.portrait;
         mem.art = mem.art.filter((x) => x !== a.id);
@@ -344,15 +368,27 @@ export function act(
       break;
     }
     case "dice:roll": {
-      const pool = z.record(z.string(), num.int().min(0).max(30)).parse(input);
-      const roll = rollPool(pool, randomInt);
+      // Accepts a bare pool ({ability: 2}) or { pool, label?, secret? }. Secret rolls are GM-only and hidden from players.
+      const raw =
+        input && typeof input === "object" && "pool" in input ? input : { pool: input };
+      const p = z
+        .object({
+          pool: z.record(z.string(), num.int().min(0).max(30)),
+          label: z.string().trim().max(60).optional(),
+          secret: z.boolean().optional(),
+        })
+        .parse(raw);
+      if (p.secret) gm();
+      const roll = rollPool(p.pool, randomInt);
       c.messages.push({
         id: id(),
         userId,
         name: m.name,
-        text: "rolled a dice pool",
+        text: p.label ? `rolled ${p.label}` : "rolled a dice pool",
         time: Date.now(),
         roll,
+        ...(p.label ? { label: p.label } : {}),
+        ...(p.secret ? { to: userId, secret: true } : {}),
       });
       break;
     }
@@ -380,8 +416,13 @@ export function act(
           type: z.enum(["PC", "NPC"]),
           success: num.int().min(0).max(100),
           advantage: num.int().min(0).max(100),
+          name: z.string().trim().max(40).optional(),
+          tokenId: key.optional(),
+          hidden: z.boolean().optional(),
         })
         .parse(input);
+      if (p.tokenId && !c.tokens.some((t) => t.id === p.tokenId))
+        throw new Error("Unknown token");
       c.initiative.slots.push({ ...p, id: id(), used: false });
       c.initiative.slots.sort(
         (a, b) =>
@@ -389,6 +430,31 @@ export function act(
           b.advantage - a.advantage ||
           (a.type === "PC" ? -1 : 1),
       );
+      break;
+    }
+    case "initiative:update": {
+      gm();
+      const p = z
+        .object({
+          id: key,
+          hidden: z.boolean().optional(),
+          name: z.string().trim().max(40).optional(),
+        })
+        .parse(input);
+      const slot = c.initiative.slots.find((s) => s.id === p.id);
+      if (!slot) throw new Error("Unknown slot");
+      if (p.hidden !== undefined) slot.hidden = p.hidden;
+      if (p.name !== undefined) {
+        if (p.name) slot.name = p.name;
+        else delete slot.name;
+      }
+      break;
+    }
+    case "initiative:remove": {
+      gm();
+      const p = z.object({ id: key }).parse(input);
+      if (!c.initiative.slots.some((s) => s.id === p.id)) throw new Error("Unknown slot");
+      c.initiative.slots = c.initiative.slots.filter((s) => s.id !== p.id);
       break;
     }
     case "initiative:use": {
@@ -446,6 +512,7 @@ export const events = [
   "token:create",
   "token:move",
   "token:update",
+  "token:flip",
   "token:delete",
   "token:duplicate",
   "token:layer",
@@ -460,6 +527,8 @@ export const events = [
   "destiny:flip",
   "destiny:set",
   "initiative:add",
+  "initiative:update",
+  "initiative:remove",
   "initiative:use",
   "initiative:next",
   "initiative:clear",

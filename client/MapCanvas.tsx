@@ -51,6 +51,8 @@ export default function MapCanvas({
   const camera = useRef({ x: 70, y: 60, zoom: 0.7 }),
     [zoom, setZoom] = useState(70),
     [fitKey, setFitKey] = useState(0);
+  const lastFlip = useRef(new Map<string, boolean>()),
+    flipAnim = useRef(new Map<string, number>());
   const images = useRef(new Map<string, HTMLImageElement>()),
     positions = useRef(new Map<string, Point>()),
     drag = useRef<any>(null),
@@ -228,6 +230,22 @@ export default function MapCanvas({
         ctx.translate(p.x, p.y);
         ctx.globalAlpha = t.hidden ? 0.4 : 1;
         ctx.rotate((t.rotation * Math.PI) / 180);
+        // Flip animation: squash the token horizontally, swap faces at the midpoint, then expand again.
+        const flipNow = Boolean(t.flipped);
+        const lastSide = lastFlip.current.get(t.id);
+        if (lastSide !== undefined && lastSide !== flipNow)
+          flipAnim.current.set(t.id, performance.now());
+        lastFlip.current.set(t.id, flipNow);
+        const flipStart = flipAnim.current.get(t.id);
+        let showBack = flipNow;
+        if (flipStart !== undefined) {
+          const q = (performance.now() - flipStart) / 350;
+          if (q >= 1) flipAnim.current.delete(t.id);
+          else {
+            ctx.scale(Math.max(0.04, Math.abs(Math.cos(q * Math.PI))), 1);
+            showBack = q < 0.5 ? !flipNow : flipNow;
+          }
+        }
         ctx.fillStyle = t.appearance?.background || "#23333e";
         ctx.strokeStyle =
           t.appearance?.outlineColor || owner?.color || "#6dd5dd";
@@ -239,15 +257,22 @@ export default function MapCanvas({
         ctx.fill();
         ctx.save();
         ctx.clip();
-        const art = t.assetId ? image(t.assetId) : null;
+        // The back face uses its own image/zoom/position; with no back image the front is shown on both sides.
+        const ownBack = showBack && Boolean(t.backAssetId);
+        const faceId = ownBack ? t.backAssetId : t.assetId;
+        const ap = t.appearance;
+        const zoom = (ownBack ? ap?.backImageScale : ap?.imageScale) ?? 1,
+          shiftX = ((ownBack ? ap?.backImageX : ap?.imageX) ?? 0) * (size / 2),
+          shiftY = ((ownBack ? ap?.backImageY : ap?.imageY) ?? 0) * (size / 2);
+        const art = faceId ? image(faceId) : null;
         if (art) {
           const ratio =
             t.appearance?.imageFit === "contain"
               ? Math.min(size / art.width, size / art.height)
               : Math.max(size / art.width, size / art.height);
-          const w = art.width * ratio,
-            h = art.height * ratio;
-          ctx.drawImage(art, -w / 2, -h / 2, w, h);
+          const w = art.width * ratio * zoom,
+            h = art.height * ratio * zoom;
+          ctx.drawImage(art, -w / 2 + shiftX, -h / 2 + shiftY, w, h);
         } else {
           ctx.fillStyle = t.appearance?.textColor || owner?.color || "#9ab3bc";
           ctx.font = `bold ${size * 0.38}px SWEuro, sans-serif`;
@@ -390,6 +415,13 @@ export default function MapCanvas({
         tabIndex={0}
         aria-label="Tactical map. Drag to pan, wheel or pinch to zoom. Select a token and use arrow keys to move."
         onKeyDown={(e) => {
+          if ((e.key === "f" || e.key === "F") && !e.ctrlKey && !e.metaKey) {
+            const t = state.tokens.find((t) => t.id === selected);
+            if (t && (gm || t.ownerId === userId)) {
+              e.preventDefault();
+              send("token:flip", { id: t.id });
+            }
+          }
           if (
             ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key)
           ) {

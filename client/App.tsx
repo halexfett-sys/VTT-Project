@@ -18,6 +18,7 @@ import SaveTools from "./SaveTools";
 import TokenAppearance from "./TokenAppearance";
 import MapCanvas, { type Tool } from "./MapCanvas";
 import CharacterTab from "./CharacterTab";
+import InitiativePopout, { SlotFace } from "./InitiativePopout";
 import NumberField from "./NumberField";
 const diceNames: Die[] = [
   "boost",
@@ -115,6 +116,9 @@ export default function App() {
     [inviteOpen, setInviteOpen] = useState(false);
   const [manageScenes, setManageScenes] = useState(false);
   const [newSize, setNewSize] = useState(1);
+  const [poolLabel, setPoolLabel] = useState("");
+  const [secretRoll, setSecretRoll] = useState(false);
+  const [initType, setInitType] = useState("PC");
   const leaving = useRef(false);
   const [sceneSelection, setSceneSelection] = useState<string[]>([]);
   const [confirmScenes, setConfirmScenes] = useState(false);
@@ -962,6 +966,7 @@ export default function App() {
               member={me}
               send={send}
               setPool={setPool}
+              setPoolLabel={setPoolLabel}
               connected={connected}
             />
           )}
@@ -1117,7 +1122,13 @@ export default function App() {
         <section className="dice-panel">
           <div className="section-heading">
             <h3>Narrative dice</h3>
-            <button className="text-button" onClick={() => setPool({})}>
+            <button
+              className="text-button"
+              onClick={() => {
+                setPool({});
+                setPoolLabel("");
+              }}
+            >
               Clear
             </button>
           </div>
@@ -1150,10 +1161,28 @@ export default function App() {
               </div>
             ))}
           </div>
+          {poolLabel && <p className="pool-picked">Rolling: {poolLabel}</p>}
+          {gm && (
+            <label className="secret-roll">
+              <input
+                type="checkbox"
+                checked={secretRoll}
+                onChange={(e) => setSecretRoll(e.target.checked)}
+              />
+              Hide this roll from players (GM only)
+            </label>
+          )}
           <button
             className="primary full roll-button"
             disabled={!Object.values(pool).some(Boolean) || !connected}
-            onClick={() => send("dice:roll", pool)}
+            onClick={() => {
+              send("dice:roll", {
+                pool,
+                ...(poolLabel ? { label: poolLabel } : {}),
+                ...(gm && secretRoll ? { secret: true } : {}),
+              });
+              setPoolLabel("");
+            }}
           >
             ◇ Roll dice pool{" "}
             <span>{Object.values(pool).reduce((a, b) => a + b, 0)}</span>
@@ -1190,19 +1219,36 @@ export default function App() {
               )}
             </div>
             {state.initiative.slots.map((s, i) => (
-              <button
-                className={`slot ${s.used ? "used" : ""}`}
-                key={s.id}
-                onClick={() => send("initiative:use", { id: s.id })}
-                disabled={!gm && s.type === "NPC"}
-              >
-                <span>{String(i + 1).padStart(2, "0")}</span>
-                <b>{s.type} slot</b>
-                <small>
-                  {s.success} S · {s.advantage} A
-                </small>
-                <span>{s.used ? "✓" : "○"}</span>
-              </button>
+              <div className="slot-row" key={s.id}>
+                <button
+                  className={`slot ${s.used ? "used" : ""}`}
+                  onClick={() => send("initiative:use", { id: s.id })}
+                  disabled={!gm && s.type === "NPC"}
+                >
+                  <span>{String(i + 1).padStart(2, "0")}</span>
+                  <SlotFace state={state} slot={s} index={i} gm={gm} room={room} />
+                  <span>{s.used ? "✓" : "○"}</span>
+                </button>
+                {gm && (
+                  <>
+                    <button
+                      className="slot-tool"
+                      aria-label={s.hidden ? "Show this combatant to players" : "Hide this combatant from players"}
+                      title={s.hidden ? "Hidden from players — click to show" : "Visible to players — click to hide"}
+                      onClick={() => send("initiative:update", { id: s.id, hidden: !s.hidden })}
+                    >
+                      {s.hidden ? "Hidden" : "Shown"}
+                    </button>
+                    <button
+                      className="slot-tool"
+                      aria-label="Remove this initiative slot"
+                      onClick={() => send("initiative:remove", { id: s.id })}
+                    >
+                      ✕
+                    </button>
+                  </>
+                )}
+              </div>
             ))}
             {!state.initiative.slots.length && (
               <p className="hint">
@@ -1216,19 +1262,54 @@ export default function App() {
                 onSubmit={(e) => {
                   e.preventDefault();
                   const f = new FormData(e.currentTarget);
+                  const nm = String(f.get("name") || "").trim(),
+                    tk = String(f.get("tokenId") || "");
                   send("initiative:add", {
                     type: f.get("type"),
                     success: Number(f.get("success")),
                     advantage: Number(f.get("advantage")),
+                    ...(nm ? { name: nm } : {}),
+                    ...(tk ? { tokenId: tk } : {}),
+                    hidden: f.get("hidden") === "on",
                   });
+                  e.currentTarget.reset();
+                  setInitType("PC");
                 }}
               >
                 <Field label="Slot type">
-                  <select name="type">
+                  <select
+                    name="type"
+                    value={initType}
+                    onChange={(e) => setInitType(e.target.value)}
+                  >
                     <option>PC</option>
                     <option>NPC</option>
                   </select>
                 </Field>
+                <Field label="Token on the map (optional)">
+                  <select name="tokenId" defaultValue="">
+                    <option value="">No token</option>
+                    {state.tokens
+                      .filter((t) => t.mapId === state.activeMapId)
+                      .map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.name}
+                        </option>
+                      ))}
+                  </select>
+                </Field>
+                <Field label="Name shown in the order (optional)">
+                  <input name="name" maxLength={40} placeholder="Defaults to the token name" />
+                </Field>
+                <label className="check">
+                  <input
+                    name="hidden"
+                    type="checkbox"
+                    key={initType}
+                    defaultChecked={initType === "NPC"}
+                  />
+                  Hide this combatant’s token and name from players
+                </label>
                 <div className="two-col">
                   <Field label="Successes">
                     <input
@@ -1295,14 +1376,19 @@ export default function App() {
                         })}
                       </time>
                     </header>
-                    {m.to && (
-                      <small className="whisper">
-                        PRIVATE →{" "}
-                        {state.members.find((u) => u.userId === m.to)?.name}
-                      </small>
+                    {m.secret ? (
+                      <span className="secret-badge">SECRET ROLL · GM ONLY</span>
+                    ) : (
+                      m.to && (
+                        <small className="whisper">
+                          PRIVATE →{" "}
+                          {state.members.find((u) => u.userId === m.to)?.name}
+                        </small>
+                      )
                     )}
                     {m.roll ? (
                       <>
+                        {m.label && <b className="roll-label">{m.label}</b>}
                         <small>ROLLED {m.roll.faces.length} DICE</small>
                         <div className="rolled-dice">
                           {m.roll.faces.map((f, i) => (
@@ -1331,6 +1417,17 @@ export default function App() {
                           {!Object.values(m.roll.net).some(Boolean) &&
                             "No net symbols"}
                         </div>
+                        {m.roll.faces.some(
+                          (f) => f.die === "difficulty" || f.die === "challenge",
+                        ) && (
+                          <div
+                            className={`roll-verdict ${m.roll.net.success > m.roll.net.failure ? "win" : "lose"}`}
+                          >
+                            {m.roll.net.success > m.roll.net.failure ? "Success" : "Failure"}
+                            {m.roll.net.triumph > 0 && " · Triumph"}
+                            {m.roll.net.despair > 0 && " · Despair"}
+                          </div>
+                        )}
                       </>
                     ) : (
                       <p>{m.text}</p>
@@ -1383,6 +1480,7 @@ export default function App() {
           </>
         )}
       </aside>
+      <InitiativePopout state={state} gm={gm} room={room} send={send} />
       <footer className="statusbar">
         <span>
           ◈ ARCHIVE <b>TABLETOP</b>
@@ -1401,6 +1499,7 @@ export default function App() {
           }}
         >
           {[
+            ["Flip token", "token:flip", {}],
             ["Duplicate", "token:duplicate", {}],
             ["Send to front", "token:layer", { front: true }],
             ["Send to back", "token:layer", { front: false }],

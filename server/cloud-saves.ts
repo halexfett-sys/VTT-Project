@@ -30,7 +30,10 @@ function checkReferences(file: SaveFile) {
       throw new Error("Save contains a missing image reference");
   };
   const tokens = file.kind === "player" ? file.tokens : file.campaign.tokens;
-  tokens.forEach((t) => ref(t.assetId));
+  tokens.forEach((t) => {
+    ref(t.assetId);
+    ref(t.backAssetId);
+  });
   const members =
     file.kind === "player" ? [file.profile] : file.campaign.members;
   members.forEach((m) => {
@@ -163,6 +166,7 @@ export function registerCloudSaves(
             .map((t) => ({ ...t, hidden: false }));
           const referenced = new Set([
             ...tokens.map((t) => t.assetId),
+            ...tokens.map((t) => t.backAssetId),
             me.portrait,
             ...me.art,
           ]);
@@ -295,7 +299,11 @@ export function registerCloudSaves(
           id: id(),
           ownerId: users.get(t.ownerId)!,
           assetId: image(t.assetId),
+          backAssetId: image(t.backAssetId),
         }));
+        c.initiative.slots.forEach((s) => {
+          delete s.tokenId; // token ids are regenerated on import
+        });
         c.maps = c.maps.map((m) => ({ ...m, assetId: image(m.assetId) }));
         c.assets = [...decoded.values()].map(({ asset }) => ({
           ...asset,
@@ -402,6 +410,7 @@ export function registerCloudSaves(
             ),
             hidden: false,
             assetId: image(t.assetId),
+            backAssetId: image(t.backAssetId),
           })),
         );
         if (c.tokens.length > 500)

@@ -83,16 +83,28 @@ export function viewFor(c: Campaign, userId: string): Campaign {
         t,
       ),
   );
+  // A token's back image is only revealed to other players once the token has been flipped.
+  const showBack = (t: Token) => Boolean(t.flipped) || t.ownerId === userId;
   const allowed = new Set([
     ...tokens.map((t) => t.assetId),
+    ...tokens.filter(showBack).map((t) => t.backAssetId),
     ...c.members.flatMap((m) => [m.portrait, ...m.art]),
     c.handout?.assetId,
   ]);
   return {
     ...structuredClone(c),
     invite: "",
+    initiative: {
+      ...c.initiative,
+      slots: c.initiative.slots.map((s) =>
+        s.hidden || c.tokens.find((t) => t.id === s.tokenId)?.hidden
+          ? { id: s.id, type: s.type, success: 0, advantage: 0, used: s.used, hidden: true }
+          : s,
+      ),
+    },
     tokens: tokens.map((t) => ({
       ...t,
+      backAssetId: showBack(t) ? t.backAssetId : undefined,
       sheet:
         t.ownerId === userId
           ? t.sheet

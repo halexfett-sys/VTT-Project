@@ -19,7 +19,7 @@ function checkReferences(file:SaveFile){
  if(file.files.length!==assets.length||file.files.some(f=>!assetIds.has(f.id)))throw new Error('Save is missing image data');
  const ref=(v:string|undefined)=>{if(v&&!assetIds.has(v))throw new Error('Save contains a missing image reference');};
  const tokens=file.kind==='player'?file.tokens:file.campaign.tokens;
- tokens.forEach(t=>ref(t.assetId));
+ tokens.forEach(t=>{ref(t.assetId);ref(t.backAssetId);});
  const members=file.kind==='player'?[file.profile]:file.campaign.members;
  members.forEach(m=>{ref(m.portrait);m.art.forEach(ref);});
  if(file.kind==='player'){
@@ -62,7 +62,7 @@ export function registerSaves(app:Express,store:ReturnType<typeof openDatabase>,
   let file:SaveFile;
   if(req.params.kind==='player'){
    const tokens=c.tokens.filter(t=>t.ownerId===me.userId).map(t=>({...t,hidden:false}));
-   const referenced=new Set([...tokens.map(t=>t.assetId),me.portrait,...me.art]);
+   const referenced=new Set([...tokens.map(t=>t.assetId),...tokens.map(t=>t.backAssetId),me.portrait,...me.art]);
    const assets=c.assets.filter(a=>(a.ownerId===me.userId&&['token','art'].includes(a.kind))||referenced.has(a.id));
    const resumeKey=randomBytes(32).toString('hex');
    store.db.prepare('INSERT INTO save_keys VALUES(?,?,?)').run(c.id,me.userId,hash(resumeKey));
@@ -85,7 +85,8 @@ export function registerSaves(app:Express,store:ReturnType<typeof openDatabase>,
   const oldMembers=structuredClone(c.members);
   c.id=id();c.invite=randomBytes(16).toString('hex');c.revision=0;
   c.members=c.members.map(m=>({...m,userId:users.get(m.userId)!,role:m.userId===file.exporterId?'gm':'player',portrait:image(m.portrait),art:m.art.map(a=>image(a)!)}));
-  c.tokens=c.tokens.map(t=>({...t,id:id(),ownerId:users.get(t.ownerId)!,assetId:image(t.assetId)}));
+  c.tokens=c.tokens.map(t=>({...t,id:id(),ownerId:users.get(t.ownerId)!,assetId:image(t.assetId),backAssetId:image(t.backAssetId)}));
+  c.initiative.slots.forEach(s=>{delete s.tokenId;}); // token ids are regenerated on import
   c.maps=c.maps.map(m=>({...m,assetId:image(m.assetId)}));
   c.assets=[...decoded.values()].map(({asset})=>({...asset,ownerId:users.get(asset.ownerId)!}));
   c.messages=c.messages.map(m=>({...m,userId:users.get(m.userId)!,to:m.to?users.get(m.to):undefined}));
@@ -109,7 +110,7 @@ export function registerSaves(app:Express,store:ReturnType<typeof openDatabase>,
   c.members=c.members.filter(m=>m.userId!==oldId&&m.userId!==req.user.id);c.members.push(profile);
   c.tokens=c.tokens.filter(t=>t.ownerId!==oldId&&t.ownerId!==req.user.id);
   const map=c.maps.find(m=>m.id===c.activeMapId)!;
-  c.tokens.push(...file.tokens.map(t=>({...t,id:id(),ownerId:req.user.id,mapId:c.maps.some(m=>m.id===t.mapId)?t.mapId:map.id,x:Math.min(t.x,(c.maps.find(m=>m.id===t.mapId)||map).width),y:Math.min(t.y,(c.maps.find(m=>m.id===t.mapId)||map).height),hidden:false,assetId:image(t.assetId)})));
+  c.tokens.push(...file.tokens.map(t=>({...t,id:id(),ownerId:req.user.id,mapId:c.maps.some(m=>m.id===t.mapId)?t.mapId:map.id,x:Math.min(t.x,(c.maps.find(m=>m.id===t.mapId)||map).width),y:Math.min(t.y,(c.maps.find(m=>m.id===t.mapId)||map).height),hidden:false,assetId:image(t.assetId),backAssetId:image(t.backAssetId)})));
   if(c.tokens.length>500)throw new Error('Table token limit exceeded');
   if(oldId!==req.user.id){c.assets.forEach(a=>{if(a.ownerId===oldId)a.ownerId=req.user.id;});c.messages.forEach(m=>{if(m.userId===oldId)m.userId=req.user.id;if(m.to===oldId)m.to=req.user.id;});}
   const imported=[...decoded.values()].map(({asset})=>({...asset,ownerId:req.user.id}));c.assets.push(...imported);store.save(c);
