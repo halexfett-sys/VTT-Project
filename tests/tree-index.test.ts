@@ -30,10 +30,11 @@ test('legacy progress migrates, merges with existing progress and still validate
 });
 
 test('trees group into games, careers, one signature tree and specializations',()=>{
-  assert.deepEqual(groups.map(g=>g.name),['Age of Rebellion','Edge of the Empire','Force and Destiny','Universal']);
-  assert.deepEqual(groups.map(g=>g.careers.length),[6,6,6,1]);
+  assert.deepEqual(groups.map(g=>g.name),['Age of Rebellion','Edge of the Empire','Force and Destiny','Universal','The Old Republic']);
+  assert.deepEqual(groups.map(g=>g.careers.length),[6,6,6,1,1]);
   for(const g of groups.slice(0,3))for(const c of g.careers){assert.ok(c.career,c.name);assert.equal(c.specs.length,6);}
-  assert.equal(groups[3].careers[0].career,undefined);assert.equal(groups[3].careers[0].specs.length,9);
+  assert.equal(groups[3].careers[0].career,undefined);assert.equal(groups[3].careers[0].specs.length,13);
+  assert.equal(groups[4].careers[0].career,undefined);assert.equal(groups[4].careers[0].specs.length,4);
   assert.equal(groups.flatMap(g=>g.careers).reduce((n,c)=>n+c.specs.length+(c.career?1:0),0),trees.length);
 });
 

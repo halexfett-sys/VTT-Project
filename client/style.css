@@ -1915,3 +1915,4 @@ h1,h2,h3,.brand {font-family:Starjhol,SWEuro,sans-serif;letter-spacing:.04em;}
 .image-adjust legend { font-size: 11px; letter-spacing: .6px; text-transform: uppercase; color: var(--muted); padding: 0 6px; }
 .token-live-preview { overflow: hidden; }
 @media (max-width: 1100px) { .init-popout { left: 12px; top: 70px; } }
+.ct-force{position:absolute;left:26px;bottom:4px;font-size:13px;color:#e0b25f;text-shadow:0 0 5px #e0b25f66}

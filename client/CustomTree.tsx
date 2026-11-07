@@ -23,18 +23,18 @@ export default function CustomTree({tree,completed,editable=true,onToggle,focus}
   },[focus]);
   if(!data)return <p role="alert">Tree data is missing for {tree.name}.</p>;
   const done=new Set(completed);
-  const card=(key:number,name:string,desc:string,cost:number,cls:string,locked:boolean,label:string,ranked=false)=>{
+  const card=(key:number,name:string,desc:string,cost:number,cls:string,locked:boolean,label:string,ranked=false,force=false)=>{
     const on=done.has(key);
-    return <button type="button" key={key} role="checkbox" aria-checked={on} aria-label={`${name}, ${cost} XP${label}`} data-node={key} disabled={!editable}
+    return <button type="button" key={key} role="checkbox" aria-checked={on} aria-label={`${name}, ${cost} XP${label}${force?', Force talent':''}`} data-node={key} disabled={!editable}
       className={`ct-cell ${cls} ${on?'done':''} ${locked&&!on?'locked':''} ${pulse===key?'pulse':''}`} onClick={()=>onToggle(key,!on)}>
       <span className="ct-head"><span className="ct-box">{on?'✓':''}</span><span className="ct-name">{name}</span></span>
-      <span className="ct-desc"><Text s={desc}/></span>{ranked&&<span className="ct-rank" title="Ranked talent">▦</span>}<span className="ct-cost">{cost}</span>
+      <span className="ct-desc"><Text s={desc}/></span>{ranked&&<span className="ct-rank" title="Ranked talent">▦</span>}{force&&<span className="ct-force" title="Force talent" aria-hidden="true">✦</span>}<span className="ct-cost">{cost}</span>
     </button>;
   };
   let body;
   if(data.cells){
     const cells:Cell[]=data.cells;
-    body=<div className="ct-grid">{cells.map((c,i)=>card(i,c.n,c.d,c.c,`${c.a?'active':''} ${c.dn?'dn':''} ${c.rt?'rt':''}`,!isReachable(cells,done,i),`, row ${Math.floor(i/4)+1} column ${i%4+1}`,!!c.k))}</div>;
+    body=<div className="ct-grid">{cells.map((c,i)=>card(i,c.n,c.d,c.c,`${c.a?'active':''} ${c.dn?'dn':''} ${c.rt?'rt':''}`,!isReachable(cells,done,i),`, row ${Math.floor(i/4)+1} column ${i%4+1}`,!!c.k,!!c.f))}</div>;
   }else{
     body=<>{(data.sig||[]).map((a,ai)=><div className="ct-sig" key={ai}>
       <div className="ct-sig-main">{card(sigNode(ai),a.n,a.d,a.c,'active wide',false,', signature ability')}</div>
@@ -44,6 +44,6 @@ export default function CustomTree({tree,completed,editable=true,onToggle,focus}
   const kind=tree.kind==='career'?'Signature abilities (30 XP each, upgrades 10 / 15 XP)':`${tree.career} specialization`;
   return <div className="ct-wrap" ref={wrap}><div className="ct-meta"><span>{kind} · <b>{completed.length}</b> / {tree.nodes} purchased · <b>{xpSpent(tree.id,completed)}</b> XP spent</span></div>
     {data.skills.length>0&&<div className="ct-chips" aria-label="Career skills">{data.skills.map(s=><span key={s}>{s}</span>)}</div>}
-    <p className="ct-hint">Click a talent to mark it purchased. Dimmed talents aren’t yet reachable through a connector from a purchased talent. Dark headers are active talents; ▦ marks ranked talents.</p>
+    <p className="ct-hint">Click a talent to mark it purchased. Dimmed talents aren’t yet reachable through a connector from a purchased talent. Dark headers are active talents; ▦ marks ranked talents; ✦ marks Force talents.</p>
     <div className="tree-scroll"><div className="ct-body">{body}</div></div></div>;
 }

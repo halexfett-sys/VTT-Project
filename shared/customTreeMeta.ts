@@ -1138,6 +1138,15 @@ export const customTreeMeta:readonly CustomTreeMeta[]=[
   "custom": true
  },
  {
+  "id": "uni-cartel-dealer",
+  "name": "Cartel Dealer",
+  "career": "Universal",
+  "game": "Universal",
+  "kind": "specialization",
+  "nodes": 20,
+  "custom": true
+ },
+ {
   "id": "uni-force-adherent",
   "name": "Force Adherent",
   "career": "Universal",
@@ -1165,8 +1174,35 @@ export const customTreeMeta:readonly CustomTreeMeta[]=[
   "custom": true
  },
  {
+  "id": "uni-gladiator",
+  "name": "Gladiator",
+  "career": "Universal",
+  "game": "Universal",
+  "kind": "specialization",
+  "nodes": 20,
+  "custom": true
+ },
+ {
   "id": "uni-imperial-academy-cadet",
   "name": "Imperial Academy Cadet",
+  "career": "Universal",
+  "game": "Universal",
+  "kind": "specialization",
+  "nodes": 20,
+  "custom": true
+ },
+ {
+  "id": "uni-imperial-loyalist",
+  "name": "Imperial Loyalist",
+  "career": "Universal",
+  "game": "Universal",
+  "kind": "specialization",
+  "nodes": 20,
+  "custom": true
+ },
+ {
+  "id": "uni-mandalorian-crusader",
+  "name": "Mandalorian Crusader",
   "career": "Universal",
   "game": "Universal",
   "kind": "specialization",
@@ -1214,6 +1250,42 @@ export const customTreeMeta:readonly CustomTreeMeta[]=[
   "name": "Ship Captain",
   "career": "Universal",
   "game": "Universal",
+  "kind": "specialization",
+  "nodes": 20,
+  "custom": true
+ },
+ {
+  "id": "tor-sith-acolyte",
+  "name": "Acolyte",
+  "career": "Sith",
+  "game": "The Old Republic",
+  "kind": "specialization",
+  "nodes": 20,
+  "custom": true
+ },
+ {
+  "id": "tor-sith-blademaster",
+  "name": "Blademaster",
+  "career": "Sith",
+  "game": "The Old Republic",
+  "kind": "specialization",
+  "nodes": 20,
+  "custom": true
+ },
+ {
+  "id": "tor-sith-lord",
+  "name": "Lord",
+  "career": "Sith",
+  "game": "The Old Republic",
+  "kind": "specialization",
+  "nodes": 20,
+  "custom": true
+ },
+ {
+  "id": "tor-sith-sorcerer",
+  "name": "Sorcerer",
+  "career": "Sith",
+  "game": "The Old Republic",
   "kind": "specialization",
   "nodes": 20,
   "custom": true
