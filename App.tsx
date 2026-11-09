@@ -1072,7 +1072,7 @@ export default function App() {
               onClick={() => send("destiny:flip", { side: "light" })}
               title="Flip a light point to dark"
             >
-              <span className="light-orb" style={{ backgroundImage: "url(/destiny/lightside.png)" }}><b className="orb-count">{state.destiny.light}</b></span>
+              <span className="light-orb" style={{ backgroundImage: "url(/destiny/lightside.png?v=2)" }}><b className="orb-count">{state.destiny.light}</b></span>
               <span>LIGHT SIDE</span>
             </button>
             <span className="muted">⇄</span>
@@ -1080,7 +1080,7 @@ export default function App() {
               onClick={() => send("destiny:flip", { side: "dark" })}
               title="Flip a dark point to light"
             >
-              <span className="dark-orb" style={{ backgroundImage: "url(/destiny/darkside.png)" }}><b className="orb-count">{state.destiny.dark}</b></span>
+              <span className="dark-orb" style={{ backgroundImage: "url(/destiny/darkside.png?v=2)" }}><b className="orb-count">{state.destiny.dark}</b></span>
               <span>DARK SIDE</span>
             </button>
           </div>
