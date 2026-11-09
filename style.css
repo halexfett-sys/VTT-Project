@@ -1911,3 +1911,9 @@ h1,h2,h3,.brand {font-family:Starjhol,SWEuro,sans-serif;letter-spacing:.04em;}
 .skill-pick .skill-dice { flex: 0 1 auto; display: inline-flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; max-width: 60%; }
 .skill-pick .skill-dice img { width: 30px; height: 30px; }
 .skill-row.active .skill-pick { border-color: var(--teal); background: #17434a; box-shadow: 0 0 0 2px var(--teal) inset; }
+/* Destiny tokens: show the whole token art and put the count in a badge on its corner */
+.light-orb, .dark-orb { position: relative; width: 64px; height: 64px; }
+.orb-count { position: absolute; right: -8px; bottom: -6px; min-width: 28px; height: 28px; padding: 0 6px; display: grid; place-items: center; border-radius: 14px; border: 2px solid #fff; background: #0c121a; color: #fff; font-size: 16px; font-weight: 700; line-height: 1; text-shadow: none; box-shadow: 0 2px 6px #000a; }
+.light-orb .orb-count { border-color: #e3ddcb; }
+.dark-orb .orb-count { border-color: #d24a50; }
+@media (max-width: 1100px) { .light-orb, .dark-orb { width: 40px; height: 40px; } .orb-count { min-width: 22px; height: 22px; font-size: 13px; right: -6px; bottom: -4px; } }
