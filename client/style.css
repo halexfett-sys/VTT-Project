@@ -1816,7 +1816,7 @@ h1,h2,h3,.brand {font-family:Starjhol,SWEuro,sans-serif;letter-spacing:.04em;}
 .character-card .character-fields > div {padding:8px;border:1px solid #344651;border-radius:4px;background:#101a23;}
 .character-fields > :nth-child(-n+4) {grid-column:1 / -1;}
 .character-panel input {min-width:0;width:100%;}
-@media (min-width:1000px) {.tabletop:has(.character-panel) {grid-template-columns:340px minmax(280px,1fr) 306px;}}
+@media (min-width:1000px) {.tabletop:has(.character-panel) {grid-template-columns:clamp(400px,30vw,480px) minmax(280px,1fr) 306px;}}
 .tree-launch{margin:20px 0;padding-top:15px;border-top:1px solid #344858}.tree-launch button{margin-bottom:8px}
 .tree-backdrop{position:fixed;inset:0;z-index:200;background:#000c;padding:20px;display:flex;align-items:center;justify-content:center}.tree-dialog{width:min(1400px,100%);height:94vh;background:#101923;border:1px solid #71899b;border-radius:10px;display:flex;flex-direction:column;overflow:hidden}.tree-dialog>header{display:flex;align-items:center;justify-content:space-between;padding:12px 20px;border-bottom:1px solid #344858}.tree-dialog h2{font-size:18px}
 .tree-layout{display:grid;grid-template-columns:250px minmax(0,1fr);min-height:0;flex:1}.tree-layout>aside{padding:16px;overflow:auto;border-right:1px solid #344858}.tree-layout nav{display:grid;gap:8px;margin-top:15px}.tree-layout nav button{text-align:left;padding:10px}.tree-layout nav small{display:block;margin-top:5px;color:#a6bacb}.tree-layout nav button[aria-pressed=true]{border-color:#f1bd72;background:#30404e}.tree-layout>main{padding:16px;display:flex;flex-direction:column;min-width:0;min-height:0}
@@ -1900,3 +1900,18 @@ h1,h2,h3,.brand {font-family:Starjhol,SWEuro,sans-serif;letter-spacing:.04em;}
 .image-adjust legend { font-size: 11px; letter-spacing: .6px; text-transform: uppercase; color: var(--muted); padding: 0 6px; }
 .token-live-preview { overflow: hidden; }
 @media (max-width: 1100px) { .init-popout { left: 12px; top: 70px; } }
+/* Character panel: larger skill rows, a highlighted selected skill and a banner that stays in view while scrolling */
+.pool-picked { position: sticky; top: 0; z-index: 3; display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 9px 12px; font-size: 14px; background: #123238; border-width: 2px; box-shadow: 0 4px 10px #0008; }
+.pool-picked strong { color: #fff; }
+.pool-picked .skill-dice img { width: 26px; height: 26px; }
+.skill-group h4 { font-size: 13px; margin-top: 18px; }
+.skill-row { margin-bottom: 6px; }
+.skill-pick { font-size: 15px; padding: 8px 10px; min-height: 40px; }
+.skill-name small { font-size: 12px; }
+.skill-dice { gap: 3px; }
+.skill-dice img { width: 24px; height: 24px; }
+.skill-rank button { width: 28px; height: 28px; font-size: 16px; }
+.skill-rank output { min-width: 18px; font-size: 15px; font-weight: 700; }
+.skill-rank input[type=checkbox] { width: 18px; height: 18px; }
+.skill-pick:hover { background: #26404a; }
+.skill-row.active .skill-pick { border-color: var(--teal); background: #17434a; box-shadow: 0 0 0 2px var(--teal) inset; font-weight: 700; }

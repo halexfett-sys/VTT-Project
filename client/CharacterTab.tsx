@@ -50,7 +50,7 @@ export default function CharacterTab({
   const [dirty, setDirty] = useState(false);
   const [notes, setNotes] = useState<string[]>([]);
   const [error, setError] = useState("");
-  const [picked, setPicked] = useState("");
+  const [picked, setPicked] = useState<{ key: string; name: string; ability: number; proficiency: number } | null>(null);
   // "Hide untrained skills" is remembered on this device until the player unchecks it.
   const [hideUntrained, setHideUntrainedState] = useState(() => {
     try {
@@ -116,7 +116,7 @@ export default function CharacterTab({
         setDraft(emptyCharacter());
         setDirty(false);
         setNotes([]);
-        setPicked("");
+        setPicked(null);
         setPoolLabel("");
       }
     });
@@ -125,9 +125,7 @@ export default function CharacterTab({
     setPool((p) => applySkillToPool(p, draft, s));
     setPoolLabel(`${s.name} check`);
     const d = skillDice(draft, s);
-    setPicked(
-      `${s.name}: ${d.proficiency} proficiency, ${d.ability} ability added to the dice pool`,
-    );
+    setPicked({ key: s.key, name: s.name, ...d });
   };
   const groups = ["General", "Combat", "Knowledge"] as const;
   const group = (s: CharSkill) => skillDefs.find((d) => d.key === s.key)?.group ?? "General";
@@ -265,7 +263,13 @@ export default function CharacterTab({
         />
         Hide untrained skills
       </label>
-      {picked && <p className="pool-picked" role="status">{picked}</p>}
+      {picked && (
+        <p className="pool-picked" role="status">
+          <strong>{picked.name}</strong>
+          <Dice ability={picked.ability} proficiency={picked.proficiency} />
+          <span>added to the dice pool</span>
+        </p>
+      )}
       {groups.map((g) => {
         const rows = skills.filter(
           (s) => group(s) === g && (!hideUntrained || s.rank > 0 || s.career),
@@ -277,9 +281,10 @@ export default function CharacterTab({
             {rows.map((s) => {
               const d = skillDice(draft, s);
               return (
-                <div className="skill-row" key={s.key}>
+                <div className={`skill-row${picked?.key === s.key ? " active" : ""}`} key={s.key}>
                   <button
                     className="skill-pick"
+                    aria-pressed={picked?.key === s.key}
                     onClick={() => choose(s)}
                     title={`Add ${s.name} to the dice pool`}
                   >
