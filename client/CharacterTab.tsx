@@ -78,14 +78,6 @@ export default function CharacterTab({
     setDirty(true);
   };
   const skills = withAllSkills(draft);
-  const setSkill = (key: string, patch: Partial<CharSkill>) =>
-    edit((c) => {
-      const all = withAllSkills(c);
-      c.skills = all
-        .map((s) => (s.key === key ? { ...s, ...patch } : s))
-        .filter((s) => s.rank > 0 || s.career || !skillDefs.some((d) => d.key === s.key));
-      return c;
-    });
   const onFile = async (f: File) => {
     setError("");
     setNotes([]);
@@ -289,35 +281,11 @@ export default function CharacterTab({
                     title={`Add ${s.name} to the dice pool`}
                   >
                     <span className="skill-name">
-                      {s.career && <b title="Career skill">◆</b>} {s.name}
+                      {s.career && <b title="Career skill" aria-label="Career skill">◆</b>} {s.name}
                       <small> {abbr(s.characteristic)}</small>
                     </span>
                     <Dice {...d} />
                   </button>
-                  <span className="skill-rank">
-                    <button
-                      aria-label={`Lower ${s.name} rank`}
-                      disabled={s.rank <= 0}
-                      onClick={() => setSkill(s.key, { rank: s.rank - 1 })}
-                    >
-                      −
-                    </button>
-                    <output aria-label={`${s.name} rank`}>{s.rank}</output>
-                    <button
-                      aria-label={`Raise ${s.name} rank`}
-                      disabled={s.rank >= 6}
-                      onClick={() => setSkill(s.key, { rank: s.rank + 1 })}
-                    >
-                      +
-                    </button>
-                    <input
-                      type="checkbox"
-                      aria-label={`${s.name} is a career skill`}
-                      title="Career skill"
-                      checked={s.career}
-                      onChange={(e) => setSkill(s.key, { career: e.target.checked })}
-                    />
-                  </span>
                 </div>
               );
             })}
