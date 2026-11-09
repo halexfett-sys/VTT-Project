@@ -1915,3 +1915,8 @@ h1,h2,h3,.brand {font-family:Starjhol,SWEuro,sans-serif;letter-spacing:.04em;}
 .skill-rank input[type=checkbox] { width: 18px; height: 18px; }
 .skill-pick:hover { background: #26404a; }
 .skill-row.active .skill-pick { border-color: var(--teal); background: #17434a; box-shadow: 0 0 0 2px var(--teal) inset; font-weight: 700; }
+/* Skill names are never cut off: the name gets its own full-width line and the dice sit underneath it */
+.skill-pick { flex-direction: column; align-items: flex-start; justify-content: center; gap: 4px; }
+.skill-name { display: block; width: 100%; overflow: visible; text-overflow: clip; white-space: normal; line-height: 1.25; font-size: 16px; font-weight: 700; color: #fff; }
+.skill-name small { margin-left: 4px; font-weight: 400; color: #b9cad6; }
+.skill-pick .skill-dice img { width: 22px; height: 22px; }
