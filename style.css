@@ -1816,7 +1816,7 @@ h1,h2,h3,.brand {font-family:Starjhol,SWEuro,sans-serif;letter-spacing:.04em;}
 .character-card .character-fields > div {padding:8px;border:1px solid #344651;border-radius:4px;background:#101a23;}
 .character-fields > :nth-child(-n+4) {grid-column:1 / -1;}
 .character-panel input {min-width:0;width:100%;}
-@media (min-width:1000px) {.tabletop:has(.character-panel) {grid-template-columns:340px minmax(280px,1fr) 306px;}}
+@media (min-width:1000px) {.tabletop:has(.character-panel) {grid-template-columns:min(clamp(520px,44vw,780px),calc(100vw - 586px)) minmax(280px,1fr) 306px;}}
 .tree-launch{margin:20px 0;padding-top:15px;border-top:1px solid #344858}.tree-launch button{margin-bottom:8px}
 .tree-backdrop{position:fixed;inset:0;z-index:200;background:#000c;padding:20px;display:flex;align-items:center;justify-content:center}.tree-dialog{width:min(1400px,100%);height:94vh;background:#101923;border:1px solid #71899b;border-radius:10px;display:flex;flex-direction:column;overflow:hidden}.tree-dialog>header{display:flex;align-items:center;justify-content:space-between;padding:12px 20px;border-bottom:1px solid #344858}.tree-dialog h2{font-size:18px}
 .tree-layout{display:grid;grid-template-columns:250px minmax(0,1fr);min-height:0;flex:1}.tree-layout>aside{padding:16px;overflow:auto;border-right:1px solid #344858}.tree-layout nav{display:grid;gap:8px;margin-top:15px}.tree-layout nav button{text-align:left;padding:10px}.tree-layout nav small{display:block;margin-top:5px;color:#a6bacb}.tree-layout nav button[aria-pressed=true]{border-color:#f1bd72;background:#30404e}.tree-layout>main{padding:16px;display:flex;flex-direction:column;min-width:0;min-height:0}
@@ -1858,10 +1858,6 @@ h1,h2,h3,.brand {font-family:Starjhol,SWEuro,sans-serif;letter-spacing:.04em;}
 .skill-name small { color: var(--muted); font-size: 9px; }
 .skill-dice { display: inline-flex; gap: 2px; flex: none; }
 .skill-dice img { width: 16px; height: 16px; object-fit: contain; }
-.skill-rank { display: inline-flex; align-items: center; gap: 3px; flex: none; }
-.skill-rank button { width: 22px; height: 22px; padding: 0; display: grid; place-items: center; }
-.skill-rank output { min-width: 14px; text-align: center; }
-.skill-rank input[type=checkbox] { margin-left: 3px; }
 .save-bar { position: sticky; bottom: 0; padding: 8px 0; background: linear-gradient(transparent, var(--panel) 30%); display: grid; gap: 6px; }
 
 /* ===== Initiative pop-out, roll labels, token faces ===== */
@@ -1900,3 +1896,18 @@ h1,h2,h3,.brand {font-family:Starjhol,SWEuro,sans-serif;letter-spacing:.04em;}
 .image-adjust legend { font-size: 11px; letter-spacing: .6px; text-transform: uppercase; color: var(--muted); padding: 0 6px; }
 .token-live-preview { overflow: hidden; }
 @media (max-width: 1100px) { .init-popout { left: 12px; top: 70px; } }
+/* Character panel: each skill is one wide horizontal rectangle, name on the left and its dice on the right.
+   The left panel itself is widened in the .tabletop:has(.character-panel) rule above. */
+.pool-picked { position: sticky; top: 0; z-index: 3; display: flex; align-items: center; flex-wrap: wrap; gap: 10px; padding: 10px 14px; font-size: 15px; background: #123238; border-width: 2px; box-shadow: 0 4px 10px #0008; }
+.pool-picked strong { color: #fff; }
+.pool-picked .skill-dice img { width: 28px; height: 28px; }
+.skill-group h4 { margin: 22px 0 8px; font-size: 13px; }
+.skill-row { display: block; margin-bottom: 8px; }
+.skill-pick { width: 100%; display: flex; flex-direction: row; align-items: center; justify-content: space-between; gap: 14px; min-height: 52px; padding: 8px 16px; background: #12284d; border: 1px solid #9fb3cf; border-radius: 14px; cursor: pointer; overflow: hidden; }
+.skill-pick:hover { background: #1a3667; border-color: #fff; }
+.skill-name { flex: 1 1 auto; min-width: 0; display: block; overflow: visible; text-overflow: clip; white-space: normal; line-height: 1.2; font-size: 18px; font-weight: 700; color: #fff; text-align: left; }
+.skill-name b { margin-right: 4px; color: var(--gold); }
+.skill-name small { margin-left: 6px; font-size: 12px; font-weight: 400; color: #b9cad6; }
+.skill-pick .skill-dice { flex: 0 1 auto; display: inline-flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; max-width: 60%; }
+.skill-pick .skill-dice img { width: 30px; height: 30px; }
+.skill-row.active .skill-pick { border-color: var(--teal); background: #17434a; box-shadow: 0 0 0 2px var(--teal) inset; }
