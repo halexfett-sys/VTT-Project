@@ -66,3 +66,24 @@ test('character data is saved by the owner only and validated',()=>{
  assert.throws(()=>act(c,p,'profile:update',{character:{...ch,characteristics:{...ch.characteristics,brawn:99}}}));
  assert.ok(memberSchema.parse(c.members[1]).character);
 });
+
+test('OggDude ranks: NonCareerRanks is not added again, and Streetwise (SW) and Warfare (WARF) are recognised',()=>{
+ const x=`<Character><Characteristics>
+  <CharCharacteristic><Key>WIL</Key><Rank><SpeciesRanks>2</SpeciesRanks><PurchasedRanks>1</PurchasedRanks></Rank></CharCharacteristic>
+  <CharCharacteristic><Key>CUN</Key><Rank><SpeciesRanks>2</SpeciesRanks><PurchasedRanks>1</PurchasedRanks></Rank></CharCharacteristic></Characteristics>
+  <Skills>
+  <CharSkill><Key>COERC</Key><Rank><PurchasedRanks>3</PurchasedRanks><NonCareerRanks>3</NonCareerRanks></Rank><isCareer>true</isCareer></CharSkill>
+  <CharSkill><Key>CHARM</Key><Rank><SpeciesRanks>1</SpeciesRanks><CareerRanks>1</CareerRanks><PurchasedRanks>2</PurchasedRanks></Rank></CharSkill>
+  <CharSkill><Key>SW</Key><Rank><CareerRanks>1</CareerRanks><PurchasedRanks>2</PurchasedRanks></Rank></CharSkill>
+  <CharSkill><Key>WARF</Key><Rank><PurchasedRanks>1</PurchasedRanks></Rank></CharSkill></Skills></Character>`;
+ const {character:c,warnings}=importOggDude(x);
+ const sk=(k:string)=>c.skills.find(s=>s.key===k)!,dice=(k:string)=>skillDice(c,sk(k));
+ assert.equal(sk('COERC').rank,3);assert.deepEqual(dice('COERC'),{proficiency:3,ability:0}); // Willpower 3, Coercion 3 = PPP
+ assert.equal(sk('CHARM').rank,4);
+ assert.equal(sk('SW').characteristic,'cunning');assert.equal(sk('SW').rank,3);assert.deepEqual(dice('SW'),{proficiency:3,ability:0});
+ assert.equal(sk('WARF').name,'Warfare');assert.equal(sk('WARF').characteristic,'intellect');
+ assert.ok(!warnings.some(w=>/Unrecognised/.test(w)));
+ // a sheet saved before Streetwise was known gets the right characteristic back
+ const old={...c,skills:[{key:'SW',name:'Sw',characteristic:'intellect' as const,rank:3,career:true}]};
+ assert.equal(withAllSkills(old).find(s=>s.key==='SW')!.characteristic,'cunning');
+});

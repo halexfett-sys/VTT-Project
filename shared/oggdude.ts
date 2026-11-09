@@ -69,14 +69,15 @@ const firstText = (n: XNode, ...names: string[]) => {
 };
 const firstNum = (n: XNode, ...names: string[]) => num(firstText(n, ...names));
 
-/** Total ranks for an OggDude Rank block: TotalRanks if present, otherwise the sum of its numeric parts. */
+/** Total ranks for an OggDude Rank block: TotalRanks if present, otherwise the sum of its numeric parts.
+ *  NonCareerRanks only records how many of the purchased ranks were bought at the non-career price, so it is not added again. */
 function totalRanks(n: XNode): number {
   const r = first(n, "Rank");
   if (!r) return num(text(first(n, "Ranks"))) ?? 0;
   if (!r.kids.length) return num(r.text) ?? 0;
   const tot = r.kids.find((k) => /^total(ranks?)?$/i.test(k.name));
   if (tot && num(text(tot)) !== undefined) return num(text(tot))!;
-  return r.kids.reduce((sum, k) => sum + (num(text(k)) ?? 0), 0);
+  return r.kids.reduce((sum, k) => sum + (/^non-?career/i.test(k.name) ? 0 : (num(text(k)) ?? 0)), 0);
 }
 
 /** "BOUNTYHUNTER" -> "Bounty Hunter" style fallback when the file only has an identifier. */
