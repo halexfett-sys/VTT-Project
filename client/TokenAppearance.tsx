@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Asset, Token, TokenAppearanceStyle } from "../shared/types";
 import { assetUrl, upload } from "./api";
 type Props = {
@@ -11,6 +11,14 @@ type Props = {
     payload: unknown,
     complete?: (ok: boolean) => void,
   ) => void;
+  /** Editing a token that is not on the table yet: report every change upward instead of saving to the server. */
+  draft?: {
+    onChange: (v: {
+      assetId: string | null;
+      backAssetId: string | null;
+      appearance: TokenAppearanceStyle;
+    }) => void;
+  };
 };
 export default function TokenAppearance({
   token,
@@ -18,6 +26,7 @@ export default function TokenAppearance({
   assets,
   ownerColor,
   send,
+  draft,
 }: Props) {
   const defaults: TokenAppearanceStyle = {
     background: "#23333e",
@@ -36,6 +45,10 @@ export default function TokenAppearance({
     [backImage, setBackImage] = useState<string | null>(token.backAssetId || null),
     [side, setSide] = useState<"front" | "back">("front"),
     [uploaded, setUploaded] = useState<Asset[]>([]);
+  useEffect(() => {
+    draft?.onChange({ assetId: image, backAssetId: backImage, appearance: style });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [image, backImage, style]);
   const change = (p: Partial<TokenAppearanceStyle>) => {
     setStyle((s) => ({ ...s, ...p }));
     setSaved(false);
@@ -78,7 +91,9 @@ export default function TokenAppearance({
     <section className="token-customizer" aria-label="Token appearance">
       <h3>Token appearance</h3>
       <p className="hint">
-        Preview your image, colors and outline before saving.
+        {draft
+          ? "Preview your image, colors and outline. They are applied when you place the token."
+          : "Preview your image, colors and outline before saving."}
       </p>
       <div className="token-preview-stage">
         <div
@@ -238,13 +253,15 @@ export default function TokenAppearance({
           No back image yet. Flipping the token shows the front image on both sides.
         </p>
       )}
-      <button
-        type="button"
-        className="full"
-        onClick={() => send("token:flip", { id: token.id })}
-      >
-        ⇄ Flip token (showing {token.flipped ? "back" : "front"})
-      </button>
+      {!draft && (
+        <button
+          type="button"
+          className="full"
+          onClick={() => send("token:flip", { id: token.id })}
+        >
+          ⇄ Flip token (showing {token.flipped ? "back" : "front"})
+        </button>
+      )}
       <div className="two-col">
         {(["background", "textColor", "outlineColor"] as const).map((k) => (
           <label className="field" key={k}>
@@ -315,6 +332,7 @@ export default function TokenAppearance({
         >
           Reset colors & outline
         </button>
+        {!draft && (
         <button
           type="button"
           className="primary"
@@ -334,13 +352,14 @@ export default function TokenAppearance({
         >
           {saving ? "Saving…" : "Save appearance"}
         </button>
+        )}
       </div>
       {error && (
         <p role="alert" className="appearance-error">
           {error}
         </p>
       )}
-      {saved && (
+      {saved && !draft && (
         <p role="status" className="appearance-saved">
           Appearance saved for everyone.
         </p>

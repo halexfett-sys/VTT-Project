@@ -7,6 +7,7 @@ import type {
   Die,
   Pool,
   Token,
+  Member,
   Sheet,
   Asset,
   Grid,
@@ -20,6 +21,9 @@ import MapCanvas, { type Tool } from "./MapCanvas";
 import CharacterTab from "./CharacterTab";
 import InitiativePopout, { SlotFace } from "./InitiativePopout";
 import NumberField from "./NumberField";
+import SliderField from "./SliderField";
+import TokenDraftModal, { type TokenDraftStart } from "./TokenDraft";
+import { characterTokenStats } from "../shared/character";
 const diceNames: Die[] = [
   "boost",
   "ability",
@@ -116,6 +120,9 @@ export default function App() {
     [inviteOpen, setInviteOpen] = useState(false);
   const [manageScenes, setManageScenes] = useState(false);
   const [newSize, setNewSize] = useState(1);
+  const [tokenDraft, setTokenDraft] = useState<TokenDraftStart | null>(null);
+  const [placing, setPlacing] = useState(false);
+  const [libraryOwner, setLibraryOwner] = useState("");
   const [poolLabel, setPoolLabel] = useState("");
   const [secretRoll, setSecretRoll] = useState(false);
   const [initType, setInitType] = useState("PC");
@@ -506,6 +513,8 @@ export default function App() {
     myArt = state.assets.filter(
       (a) => a.ownerId === user.id && a.kind === "art",
     );
+  const libraryOwnerId = gm && state.members.some((m) => m.userId === libraryOwner) ? libraryOwner : user.id,
+    libraryOwnerName = state.members.find((m) => m.userId === libraryOwnerId)?.name ?? "";
   const updateGrid = (patch: Partial<Grid>) =>
     send("map:grid", { ...map.grid, ...patch });
   const visibleTokens = state.tokens.filter((t) => t.mapId === map.id);
@@ -525,6 +534,43 @@ export default function App() {
             <strong>{state.name}</strong>
           </div>
           <span className="badge">{gm ? "GM VIEW" : "PLAYER VIEW"}</span>
+          <div className="crew-manifest">
+            <span className="eyebrow">CREW MANIFEST</span>
+            <div className="crew-faces">
+              {state.members.map((m) => (
+                <span
+                  key={m.userId}
+                  title={`${m.name} · ${m.role}`}
+                  style={{ borderColor: m.color }}
+                >
+                  {m.name.slice(0, 2)}
+                </span>
+              ))}
+              <small>{state.members.length} members</small>
+            </div>
+            {gm && state.members.length > 1 && (
+              <details className="crew-manage">
+                <summary>Manage players</summary>
+                <div className="crew-popover">
+                  {state.members
+                    .filter((m) => m.role !== "gm")
+                    .map((m) => (
+                      <div className="crew-row" key={m.userId}>
+                        <span style={{ borderColor: m.color }}>{m.name.slice(0, 2)}</span>
+                        <em>{m.name}</em>
+                        <button
+                          className="danger-button"
+                          aria-label={`Remove ${m.name} from the table`}
+                          onClick={() => removePlayer(m)}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ))}
+                </div>
+              </details>
+            )}
+          </div>
         </div>
         <div className="top-actions">
           <span className={`connection ${connected ? "" : "offline"}`}>
@@ -631,24 +677,20 @@ export default function App() {
                       <option value="none">None</option>
                     </select>
                   </Field>
-                  <div className="two-col">
-                    <Field label="Size (px)">
-                      <NumberField
-                        label="Grid size in pixels"
-                        min={16}
-                        max={256}
-                        value={map.grid.size}
-                        onCommit={(v) => updateGrid({ size: v })}
-                      />
-                    </Field>
-                    <Field label="Color">
-                      <input
-                        type="color"
-                        value={map.grid.color}
-                        onChange={(e) => updateGrid({ color: e.target.value })}
-                      />
-                    </Field>
-                  </div>
+                  <SliderField
+                    label="Grid size"
+                    min={16}
+                    max={256}
+                    value={map.grid.size}
+                    onCommit={(v) => updateGrid({ size: v })}
+                  />
+                  <Field label="Color">
+                    <input
+                      type="color"
+                      value={map.grid.color}
+                      onChange={(e) => updateGrid({ color: e.target.value })}
+                    />
+                  </Field>
                   <div className="two-col">
                     {(["offsetX", "offsetY"] as const).map((k) => (
                       <Field
@@ -745,7 +787,7 @@ export default function App() {
                 onSubmit={(e) => {
                   e.preventDefault();
                   const f = new FormData(e.currentTarget);
-                  send("token:create", { name: f.get("name"), size: newSize });
+                  setTokenDraft({ name: String(f.get("name")), size: newSize });
                   e.currentTarget.reset();
                 }}
               >
@@ -756,7 +798,7 @@ export default function App() {
                   required
                   maxLength={80}
                 />
-                <button className="full">+ Create marker token</button>
+                <button className="full">+ Create marker token…</button>
               </form>
               <Field label={`New token size · ${newSize} grid ${newSize === 1 ? "square" : "squares"}`}>
                 <input
@@ -778,48 +820,85 @@ export default function App() {
                 />
               </Field>
               <div className="section-heading separated">
-                <h3>Token library</h3>
+                <h3>{libraryOwnerId === user.id ? "My token library" : `${libraryOwnerName}'s token library`}</h3>
               </div>
-              <Upload
-                busy={busy}
-                label="+ Upload token image"
-                onFile={(f) => doUpload("token", f)}
-              />
+              {gm && state.members.length > 1 && (
+                <Field label="Library">
+                  <select
+                    value={libraryOwnerId}
+                    onChange={(e) => setLibraryOwner(e.target.value)}
+                  >
+                    {state.members.map((m) => (
+                      <option key={m.userId} value={m.userId}>
+                        {m.userId === user.id ? "My library" : `${m.name}'s library`}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+              )}
+              {libraryOwnerId === user.id ? (
+                <Upload
+                  busy={busy}
+                  label="+ Upload token image"
+                  onFile={(f) => doUpload("token", f)}
+                />
+              ) : (
+                <p className="hint">
+                  Tokens placed from this library are controlled by {libraryOwnerName}.
+                </p>
+              )}
               <div className="asset-grid">
                 {state.assets
-                  .filter(
-                    (a) => a.kind === "token" && (gm || a.ownerId === user.id),
-                  )
-                  .map((a) => (
-                    <div className="asset-tile" key={a.id}>
-                      <button
-                        title={`Place ${a.name} at ${newSize} grid ${newSize === 1 ? "square" : "squares"}`}
-                        onClick={() =>
-                          send("token:create", {
-                            name: a.name.replace(/\.[^.]+$/, ""),
-                            assetId: a.id,
-                            size: newSize,
-                          })
-                        }
-                      >
-                        <img src={assetUrl(room, a.id)} alt={a.name} />
-                        <span>{a.name}</span>
-                        <small>+ Place</small>
-                      </button>
-                      <button
-                        className="asset-delete"
-                        aria-label={`Delete ${a.name} from the library`}
-                        title="Delete from library"
-                        onClick={() => deleteAsset(a)}
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  ))}
+                  .filter((a) => a.kind === "token" && a.ownerId === libraryOwnerId)
+                  .map((a) => {
+                    const tokenName = a.name.replace(/\.[^.]+$/, "");
+                    return (
+                      <div className="asset-tile" key={a.id}>
+                        <button
+                          title={`Edit and place ${a.name}`}
+                          onClick={() =>
+                            setTokenDraft({
+                              name: tokenName,
+                              assetId: a.id,
+                              ownerId: gm ? libraryOwnerId : undefined,
+                              size: newSize,
+                            })
+                          }
+                        >
+                          <img src={assetUrl(room, a.id)} alt={a.name} />
+                          <span>{a.name}</span>
+                          <small>Edit &amp; place…</small>
+                        </button>
+                        <button
+                          className="asset-quick"
+                          aria-label={`Place ${a.name} now without editing`}
+                          title={`Place now at ${newSize} grid ${newSize === 1 ? "square" : "squares"}`}
+                          onClick={() =>
+                            send("token:create", {
+                              name: tokenName,
+                              assetId: a.id,
+                              size: newSize,
+                              ...(gm && libraryOwnerId !== user.id ? { ownerId: libraryOwnerId } : {}),
+                            })
+                          }
+                        >
+                          ⚡
+                        </button>
+                        <button
+                          className="asset-delete"
+                          aria-label={`Delete ${a.name} from the library`}
+                          title="Delete from library"
+                          onClick={() => deleteAsset(a)}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    );
+                  })}
               </div>
               <p className="hint">
-                Click an image to place a token. Select a token to edit its
-                sheet. GM can assign its owner.
+                Click an image to edit the token before placing it, or ⚡ to place it right away.
+                Select a token on the table to edit its sheet.
               </p>
             </>
           )}
@@ -971,41 +1050,6 @@ export default function App() {
             />
           )}
         </div>
-        <div className="crew-strip">
-          <span className="eyebrow">CREW MANIFEST</span>
-          <div>
-            {state.members.map((m) => (
-              <span
-                key={m.userId}
-                title={`${m.name} · ${m.role}`}
-                style={{ borderColor: m.color }}
-              >
-                {m.name.slice(0, 2)}
-              </span>
-            ))}
-            <small>{state.members.length} members</small>
-          </div>
-          {gm && state.members.length > 1 && (
-            <details className="crew-manage">
-              <summary>Manage players</summary>
-              {state.members
-                .filter((m) => m.role !== "gm")
-                .map((m) => (
-                  <div className="crew-row" key={m.userId}>
-                    <span style={{ borderColor: m.color }}>{m.name.slice(0, 2)}</span>
-                    <em>{m.name}</em>
-                    <button
-                      className="danger-button"
-                      aria-label={`Remove ${m.name} from the table`}
-                      onClick={() => removePlayer(m)}
-                    >
-                      Remove
-                    </button>
-                  </div>
-                ))}
-            </details>
-          )}
-        </div>
       </aside>
       <main className="map-area">
         <div className="map-toolbar">
@@ -1042,7 +1086,17 @@ export default function App() {
                 ? "RANGE BANDS"
                 : tool.toUpperCase()}
           </span>
-          {tool === "range" && <label className="range-base">Base radius (map px)<NumberField label="Range band base radius in pixels" min={8} max={2000} value={rangeBase} onCommit={setRangeBase} /></label>}
+          {tool === "range" && <div className="range-base"><SliderField live label="Range band radius" unit=" px" min={8} max={1000} step={4} value={rangeBase} onCommit={setRangeBase} /></div>}
+          {token && gm && (
+            <button
+              className="inspect"
+              aria-pressed={token.hidden}
+              title={token.hidden ? "Hidden from players. Click to show." : "Visible to players. Click to hide."}
+              onClick={() => send("token:update", { id: token.id, hidden: !token.hidden })}
+            >
+              {token.hidden ? "◌ Show to players" : "◉ Hide from players"}
+            </button>
+          )}
           {token && (
             <button className="inspect" onClick={() => setSheetOpen(true)}>
               ◈ {token.name} · Rename / edit
@@ -1503,6 +1557,13 @@ export default function App() {
             ["Duplicate", "token:duplicate", {}],
             ["Send to front", "token:layer", { front: true }],
             ["Send to back", "token:layer", { front: false }],
+            ...(gm
+              ? [
+                  state.tokens.find((t) => t.id === menu.id)?.hidden
+                    ? ["Show to players", "token:update", { hidden: false }]
+                    : ["Hide from players", "token:update", { hidden: true }],
+                ]
+              : []),
             ["Delete token", "token:delete", {}],
           ].map(([label, event, extra]) => (
             <button
@@ -1549,6 +1610,7 @@ export default function App() {
                 token={token}
                 gm={gm}
                 members={state.members}
+                character={state.members.find((m) => m.userId === token.ownerId)?.character}
                 save={(p) => {
                   send("token:update", p);
                   setSheetOpen(false);
@@ -1796,6 +1858,26 @@ export default function App() {
           </section>
         </div>
       )}
+      {tokenDraft && (
+        <TokenDraftModal
+          key={`${tokenDraft.name}-${tokenDraft.assetId ?? "marker"}`}
+          start={tokenDraft}
+          room={room}
+          assets={state.assets.filter((a) => a.ownerId === user.id || a.id === tokenDraft.assetId)}
+          members={state.members}
+          me={me}
+          gm={gm}
+          placing={placing}
+          onClose={() => setTokenDraft(null)}
+          onPlace={(payload) => {
+            setPlacing(true);
+            send("token:create", payload, (ok) => {
+              setPlacing(false);
+              if (ok) setTokenDraft(null);
+            });
+          }}
+        />
+      )}
       {toast}
     </div>
   );
@@ -1804,15 +1886,26 @@ function TokenForm({
   token: t,
   gm,
   members,
+  character,
   save,
 }: {
   token: Token;
   gm: boolean;
   members: Campaign["members"];
+  character?: Member["character"];
   save: (p: any) => void;
 }) {
+  const formRef = useRef<HTMLFormElement>(null);
+  const fillFromCharacter = () => {
+    if (!character || !formRef.current) return;
+    for (const [k, v] of Object.entries(characterTokenStats(character))) {
+      const input = formRef.current.elements.namedItem(k) as HTMLInputElement | null;
+      if (input) input.value = String(v);
+    }
+  };
   return (
     <form
+      ref={formRef}
       className="stack"
       onSubmit={(e) => {
         e.preventDefault();
@@ -1884,6 +1977,11 @@ function TokenForm({
         </>
       )}
       <h3>Character sheet</h3>
+      {character && (
+        <button type="button" onClick={fillFromCharacter}>
+          Fill from {character.name || "character"} sheet
+        </button>
+      )}
       <div className="two-col">
         {Object.entries({
           wounds: "Wounds · current",

@@ -63,3 +63,52 @@ test('initiative slots can name a token, be hidden from players, edited and remo
  t.hidden=true;assert.equal(viewFor(c,p).initiative.slots[0].hidden,true); // a token the GM hid on the map is masked here too
  act(c,gm,'initiative:remove',{id:gmSlots[0].id});assert.equal(c.initiative.slots.length,1);
 });
+
+import { characterSchema } from "../shared/character";
+const tokenFixture = () => {
+  const gm = id(), player = id(), c = newCampaign("Test", gm, "GM");
+  c.members.push({ userId: player, name: "Player", color: "#ffffff", role: "player", art: [] });
+  return { gm, player, c };
+};
+test("tokens can be created fully edited: size, status, sheet, appearance and GM-only hidden/owner", () => {
+  const { c, gm, player } = tokenFixture();
+  const look = { background: "#112233", textColor: "#ffffff", outlineColor: "#ff0000", outlineWidth: 4, shape: "square", imageFit: "contain" };
+  act(c, gm, "token:create", {
+    name: "Guard", size: 2, rotation: 90, status: "Alert", hidden: true, ownerId: player, appearance: look,
+    sheet: { wounds: 0, woundThreshold: 14, strain: 0, strainThreshold: 10, soak: 3, defense: 1, credits: 0, notes: "n" },
+  });
+  const t = c.tokens[0];
+  assert.equal(t.size, 2); assert.equal(t.rotation, 90); assert.equal(t.status, "Alert");
+  assert.equal(t.hidden, true); assert.equal(t.ownerId, player);
+  assert.equal(t.appearance?.shape, "square"); assert.equal(t.sheet.soak, 3);
+  assert.equal(viewFor(c, player).tokens.length, 0); // hidden from players
+  act(c, gm, "token:update", { id: t.id, hidden: false });
+  assert.equal(viewFor(c, player).tokens.length, 1); // GM unhid it
+});
+test("players cannot create hidden tokens or tokens for someone else", () => {
+  const { c, gm, player } = tokenFixture();
+  act(c, player, "token:create", { name: "Mine", hidden: true, ownerId: gm, size: 1.5 });
+  assert.equal(c.tokens[0].hidden, false);
+  assert.equal(c.tokens[0].ownerId, player);
+  assert.equal(c.tokens[0].size, 1.5);
+});
+test("importing a character sheet loads thresholds, soak and defense onto the player's token", () => {
+  const { c, player } = tokenFixture();
+  act(c, player, "token:create", { name: "Kira" });
+  c.tokens[0].sheet.wounds = 4;
+  const ch = characterSchema.parse({ ...emptyCharacter(), name: "Kira", soak: 5, woundThreshold: 13, strainThreshold: 11, defenseRanged: 1, defenseMelee: 2 });
+  act(c, player, "profile:update", { character: ch });
+  const s = c.tokens[0].sheet;
+  assert.equal(s.woundThreshold, 13); assert.equal(s.strainThreshold, 11);
+  assert.equal(s.soak, 5); assert.equal(s.defense, 2);
+  assert.equal(s.wounds, 4); // current damage is kept
+});
+test("character stats go only to the token named like the character when a player has several", () => {
+  const { c, player } = tokenFixture();
+  act(c, player, "token:create", { name: "Droid" });
+  act(c, player, "token:create", { name: "Kira" });
+  const ch = characterSchema.parse({ ...emptyCharacter(), name: "kira", soak: 6, woundThreshold: 12, strainThreshold: 12 });
+  act(c, player, "profile:update", { character: ch });
+  assert.equal(c.tokens.find((t) => t.name === "Kira")!.sheet.soak, 6);
+  assert.equal(c.tokens.find((t) => t.name === "Droid")!.sheet.soak, 0);
+});

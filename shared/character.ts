@@ -178,3 +178,13 @@ export function applySkillToPool(pool: Pool, c: Character, s: CharSkill): Pool {
   if (proficiency) next.proficiency = proficiency;
   return next;
 }
+
+/** The token-sheet numbers a character sheet provides. Token defense is a single number, so the higher of ranged and melee is used. */
+export function characterTokenStats(c: Character) {
+  return {
+    soak: c.soak,
+    defense: Math.max(c.defenseRanged, c.defenseMelee),
+    ...(c.woundThreshold > 0 ? { woundThreshold: c.woundThreshold } : {}),
+    ...(c.strainThreshold > 0 ? { strainThreshold: c.strainThreshold } : {}),
+  };
+}

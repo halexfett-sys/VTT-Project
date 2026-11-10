@@ -1,9 +1,9 @@
-import { characterSchema } from "../shared/character.js";
+import { characterSchema, characterTokenStats } from "../shared/character.js";
 import { trees } from "../shared/trees.js";
 import { randomInt } from "node:crypto";
 import { z } from "zod";
 import { rollPool } from "../shared/dice.js";
-import { defaultSheet, type Campaign, type Token } from "../shared/types.js";
+import { defaultSheet, type Campaign, type Member, type Token } from "../shared/types.js";
 import { canEdit, id, newMap } from "./state.js";
 const num = z.number().finite(),
   coord = num.min(0).max(20000),
@@ -20,6 +20,30 @@ const sheet = z.object({
   credits: num.min(0).max(1e12),
   notes: z.string().max(10000),
 });
+const appearance = z.object({
+  background: color,
+  textColor: color,
+  outlineColor: color,
+  outlineWidth: num.min(0).max(12),
+  shape: z.enum(["circle", "square"]),
+  imageFit: z.enum(["cover", "contain"]),
+  imageScale: num.min(0.25).max(4).optional(),
+  imageX: num.min(-1).max(1).optional(),
+  imageY: num.min(-1).max(1).optional(),
+  backImageScale: num.min(0.25).max(4).optional(),
+  backImageX: num.min(-1).max(1).optional(),
+  backImageY: num.min(-1).max(1).optional(),
+});
+/** Copy wound/strain thresholds, soak and defense from a member's character sheet onto their token.
+ *  Targets are the tokens named like the character, or the member's only token. Current wounds and strain are kept. */
+export function applyCharacterToTokens(c: Campaign, m: Member) {
+  if (!m.character) return;
+  const mine = c.tokens.filter((t) => t.ownerId === m.userId);
+  const nm = (m.character.name ?? "").trim().toLowerCase();
+  const named = nm ? mine.filter((t) => t.name.trim().toLowerCase() === nm) : [];
+  const targets = named.length ? named : mine.length === 1 ? mine : [];
+  for (const t of targets) t.sheet = { ...t.sheet, ...characterTokenStats(m.character) };
+}
 /** Remove a member and hand any tokens they controlled to the first GM so nothing is orphaned. */
 export function removeMember(c: Campaign, userId: string) {
   const heir = c.members.find((x) => x.role === "gm" && x.userId !== userId);
@@ -132,32 +156,40 @@ export function act(
         .object({
           name,
           assetId: key.optional(),
+          backAssetId: key.optional(),
           ownerId: key.optional(),
           size: num.min(0.5).max(10).optional(),
+          rotation: num.min(-360).max(360).optional(),
+          status: z.string().max(30).optional(),
+          hidden: z.boolean().optional(),
+          sheet: sheet.optional(),
+          appearance: appearance.optional(),
         })
         .parse(input);
       if (p.assetId) asset(p.assetId);
+      if (p.backAssetId) asset(p.backAssetId);
+      // Players always own what they create and cannot create hidden tokens; ownerId and hidden are GM options.
       const ownerId = m.role === "gm" ? p.ownerId || userId : userId;
       if (!c.members.some((m) => m.userId === ownerId))
         throw new Error("Unknown owner");
       if (c.tokens.length >= 500) throw new Error("Token limit reached");
+      const placeOn = c.maps.find((m) => m.id === c.activeMapId)!;
       c.tokens.push({
         id: id(),
         mapId: c.activeMapId,
         ownerId,
         name: p.name,
         assetId: p.assetId,
-        x: Math.min(320, c.maps.find((m) => m.id === c.activeMapId)!.width / 2),
-        y: Math.min(
-          320,
-          c.maps.find((m) => m.id === c.activeMapId)!.height / 2,
-        ),
+        ...(p.backAssetId ? { backAssetId: p.backAssetId } : {}),
+        ...(p.appearance ? { appearance: p.appearance } : {}),
+        x: Math.min(320, placeOn.width / 2),
+        y: Math.min(320, placeOn.height / 2),
         size: p.size ?? 1,
-        rotation: 0,
-        status: "",
-        hidden: false,
+        rotation: p.rotation ?? 0,
+        status: p.status ?? "",
+        hidden: m.role === "gm" ? Boolean(p.hidden) : false,
         z: c.tokens.length,
-        sheet: defaultSheet(),
+        sheet: p.sheet ?? defaultSheet(),
       });
       break;
     }
@@ -205,22 +237,7 @@ export function act(
           ownerId: key.optional(),
           sheet: sheet.optional(),
           assetId: key.nullable().optional(),
-          appearance: z
-            .object({
-              background: color,
-              textColor: color,
-              outlineColor: color,
-              outlineWidth: num.min(0).max(12),
-              shape: z.enum(["circle", "square"]),
-              imageFit: z.enum(["cover", "contain"]),
-              imageScale: num.min(0.25).max(4).optional(),
-              imageX: num.min(-1).max(1).optional(),
-              imageY: num.min(-1).max(1).optional(),
-              backImageScale: num.min(0.25).max(4).optional(),
-              backImageX: num.min(-1).max(1).optional(),
-              backImageY: num.min(-1).max(1).optional(),
-            })
-            .optional(),
+          appearance: appearance.optional(),
           backAssetId: key.nullable().optional(),
           flipped: z.boolean().optional(),
         })
@@ -287,7 +304,10 @@ export function act(
       const { character, ...rest } = p;
       Object.assign(m, rest);
       if (character === null) delete m.character; // player removed their character sheet
-      else if (character) m.character = character;
+      else if (character) {
+        m.character = character;
+        applyCharacterToTokens(c, m);
+      }
       break;
     }
         case "profile:tree": {

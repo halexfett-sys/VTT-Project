@@ -1911,3 +1911,29 @@ h1,h2,h3,.brand {font-family:Starjhol,SWEuro,sans-serif;letter-spacing:.04em;}
 .skill-pick .skill-dice { flex: 0 1 auto; display: inline-flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; max-width: 60%; }
 .skill-pick .skill-dice img { width: 30px; height: 30px; }
 .skill-row.active .skill-pick { border-color: var(--teal); background: #17434a; box-shadow: 0 0 0 2px var(--teal) inset; }
+
+/* Crew manifest in the top bar, right of the campaign name */
+.crew-manifest { position: relative; display: flex; align-items: center; gap: 10px; padding-left: 16px; border-left: 1px solid #35404a; min-width: 0; }
+.crew-manifest .eyebrow { font-size: 8px; color: #8d9ea9; letter-spacing: 1.4px; white-space: nowrap; }
+.crew-faces { display: flex; align-items: center; }
+.crew-faces > span { border: 1px solid; border-radius: 50%; width: 26px; height: 26px; display: grid; place-items: center; font-size: 8px; background: #26313b; margin-right: -5px; flex: none; }
+.crew-faces small { margin: 0 0 0 14px; font-size: 9px; letter-spacing: normal; white-space: nowrap; display: inline; }
+.crew-manifest .crew-manage { margin: 0; }
+.crew-manifest .crew-manage summary { white-space: nowrap; }
+.crew-popover { position: absolute; top: calc(100% + 6px); right: 0; z-index: 30; min-width: 230px; padding: 10px 12px 12px; background: #19232c; border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 10px 30px #0009; }
+@media (max-width: 1100px) { .crew-manifest .eyebrow { display: none; } .crew-manifest { padding-left: 10px; } }
+@media (max-width: 700px) { .crew-faces small { display: none; } .crew-manifest .crew-manage summary { font-size: 10px; } }
+
+/* Sliders */
+.slider-field input[type="range"] { width: 100%; }
+.range-base { display: flex; align-items: center; min-width: 160px; }
+.range-base .field { margin: 0; flex: 1; }
+.range-base input[type="range"] { width: 100%; padding: 0; }
+
+/* Quick-place button on token library tiles */
+.asset-quick {
+  position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; padding: 0 !important;
+  display: grid; place-items: center; border-radius: 50%; font-size: 11px; line-height: 1;
+  background: #1d3040; border: 1px solid #5b8fb0; color: #dff1ff; opacity: .85;
+}
+.asset-quick:hover, .asset-quick:focus-visible { opacity: 1; background: #2a4a63; }
