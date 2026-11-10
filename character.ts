@@ -60,7 +60,7 @@ export const skillDefs: SkillDef[] = [
   { key: "RIDE", name: "Riding", characteristic: "agility", group: "General" },
   { key: "SKUL", name: "Skulduggery", characteristic: "cunning", group: "General" },
   { key: "STEAL", name: "Stealth", characteristic: "agility", group: "General" },
-  { key: "STRTWSE", name: "Streetwise", characteristic: "cunning", group: "General", aliases: ["STREETWISE", "STREET"] },
+  { key: "SW", name: "Streetwise", characteristic: "cunning", group: "General", aliases: ["STREETWISE", "STREET"] },
   { key: "SURV", name: "Survival", characteristic: "cunning", group: "General" },
   { key: "VIGIL", name: "Vigilance", characteristic: "willpower", group: "General" },
   { key: "BRAWL", name: "Brawl", characteristic: "brawn", group: "Combat" },
@@ -74,6 +74,7 @@ export const skillDefs: SkillDef[] = [
   { key: "LORE", name: "Lore", characteristic: "intellect", group: "Knowledge" },
   { key: "OUT", name: "Outer Rim", characteristic: "intellect", group: "Knowledge", aliases: ["OUTERRIM"] },
   { key: "UND", name: "Underworld", characteristic: "intellect", group: "Knowledge", aliases: ["UNDERWORLD"] },
+  { key: "WARF", name: "Warfare", characteristic: "intellect", group: "Knowledge", aliases: ["WARFARE"] },
   { key: "XEN", name: "Xenology", characteristic: "intellect", group: "Knowledge", aliases: ["XENOLOGY"] },
 ];
 
@@ -148,16 +149,13 @@ export const emptyCharacter = (): Character => ({
 /** A full skill list (rank 0) so every skill is always shown, merged with the character's own ranks. */
 export function withAllSkills(c: Character): CharSkill[] {
   const have = new Map(c.skills.map((s) => [norm(s.key), s]));
-  const out: CharSkill[] = skillDefs.map(
-    (d) =>
-      have.get(norm(d.key)) ?? {
-        key: d.key,
-        name: d.name,
-        characteristic: d.characteristic,
-        rank: 0,
-        career: false,
-      },
-  );
+  // A skill's linked characteristic is fixed by the skill, so it always comes from the definition (fixes sheets saved before a skill was known).
+  const out: CharSkill[] = skillDefs.map((d) => {
+    const s = have.get(norm(d.key));
+    return s
+      ? { ...s, name: d.name, characteristic: d.characteristic }
+      : { key: d.key, name: d.name, characteristic: d.characteristic, rank: 0, career: false };
+  });
   const known = new Set(skillDefs.map((d) => norm(d.key)));
   for (const s of c.skills) if (!known.has(norm(s.key))) out.push(s); // custom/unknown skills
   return out;
@@ -179,4 +177,14 @@ export function applySkillToPool(pool: Pool, c: Character, s: CharSkill): Pool {
   if (ability) next.ability = ability;
   if (proficiency) next.proficiency = proficiency;
   return next;
+}
+
+/** The token-sheet numbers a character sheet provides. Token defense is a single number, so the higher of ranged and melee is used. */
+export function characterTokenStats(c: Character) {
+  return {
+    soak: c.soak,
+    defense: Math.max(c.defenseRanged, c.defenseMelee),
+    ...(c.woundThreshold > 0 ? { woundThreshold: c.woundThreshold } : {}),
+    ...(c.strainThreshold > 0 ? { strainThreshold: c.strainThreshold } : {}),
+  };
 }

@@ -1,8 +1,9 @@
+import { characterSchema, characterTokenStats } from "../shared/character.js";
+import { trees } from "../shared/trees.js";
 import { randomInt } from "node:crypto";
 import { z } from "zod";
 import { rollPool } from "../shared/dice.js";
-import { defaultSheet, type Campaign, type Token } from "../shared/types.js";
-import { trees } from "../shared/trees.js";
+import { defaultSheet, type Campaign, type Member, type Token } from "../shared/types.js";
 import { canEdit, id, newMap } from "./state.js";
 const num = z.number().finite(),
   coord = num.min(0).max(20000),
@@ -19,6 +20,37 @@ const sheet = z.object({
   credits: num.min(0).max(1e12),
   notes: z.string().max(10000),
 });
+const appearance = z.object({
+  background: color,
+  textColor: color,
+  outlineColor: color,
+  outlineWidth: num.min(0).max(12),
+  shape: z.enum(["circle", "square"]),
+  imageFit: z.enum(["cover", "contain"]),
+  imageScale: num.min(0.25).max(4).optional(),
+  imageX: num.min(-1).max(1).optional(),
+  imageY: num.min(-1).max(1).optional(),
+  backImageScale: num.min(0.25).max(4).optional(),
+  backImageX: num.min(-1).max(1).optional(),
+  backImageY: num.min(-1).max(1).optional(),
+});
+/** Copy wound/strain thresholds, soak and defense from a member's character sheet onto their token.
+ *  Targets are the tokens named like the character, or the member's only token. Current wounds and strain are kept. */
+export function applyCharacterToTokens(c: Campaign, m: Member) {
+  if (!m.character) return;
+  const mine = c.tokens.filter((t) => t.ownerId === m.userId);
+  const nm = (m.character.name ?? "").trim().toLowerCase();
+  const named = nm ? mine.filter((t) => t.name.trim().toLowerCase() === nm) : [];
+  const targets = named.length ? named : mine.length === 1 ? mine : [];
+  for (const t of targets) t.sheet = { ...t.sheet, ...characterTokenStats(m.character) };
+}
+/** Remove a member and hand any tokens they controlled to the first GM so nothing is orphaned. */
+export function removeMember(c: Campaign, userId: string) {
+  const heir = c.members.find((x) => x.role === "gm" && x.userId !== userId);
+  if (!heir) throw new Error("No GM to take over this player's tokens");
+  for (const t of c.tokens) if (t.ownerId === userId) t.ownerId = heir.userId;
+  c.members = c.members.filter((x) => x.userId !== userId);
+}
 export function act(
   c: Campaign,
   userId: string,
@@ -121,30 +153,43 @@ export function act(
     }
     case "token:create": {
       const p = z
-        .object({ name, assetId: key.optional(), ownerId: key.optional() })
+        .object({
+          name,
+          assetId: key.optional(),
+          backAssetId: key.optional(),
+          ownerId: key.optional(),
+          size: num.min(0.5).max(10).optional(),
+          rotation: num.min(-360).max(360).optional(),
+          status: z.string().max(30).optional(),
+          hidden: z.boolean().optional(),
+          sheet: sheet.optional(),
+          appearance: appearance.optional(),
+        })
         .parse(input);
       if (p.assetId) asset(p.assetId);
+      if (p.backAssetId) asset(p.backAssetId);
+      // Players always own what they create and cannot create hidden tokens; ownerId and hidden are GM options.
       const ownerId = m.role === "gm" ? p.ownerId || userId : userId;
       if (!c.members.some((m) => m.userId === ownerId))
         throw new Error("Unknown owner");
       if (c.tokens.length >= 500) throw new Error("Token limit reached");
+      const placeOn = c.maps.find((m) => m.id === c.activeMapId)!;
       c.tokens.push({
         id: id(),
         mapId: c.activeMapId,
         ownerId,
         name: p.name,
         assetId: p.assetId,
-        x: Math.min(320, c.maps.find((m) => m.id === c.activeMapId)!.width / 2),
-        y: Math.min(
-          320,
-          c.maps.find((m) => m.id === c.activeMapId)!.height / 2,
-        ),
-        size: 1,
-        rotation: 0,
-        status: "",
-        hidden: false,
+        ...(p.backAssetId ? { backAssetId: p.backAssetId } : {}),
+        ...(p.appearance ? { appearance: p.appearance } : {}),
+        x: Math.min(320, placeOn.width / 2),
+        y: Math.min(320, placeOn.height / 2),
+        size: p.size ?? 1,
+        rotation: p.rotation ?? 0,
+        status: p.status ?? "",
+        hidden: m.role === "gm" ? Boolean(p.hidden) : false,
         z: c.tokens.length,
-        sheet: defaultSheet(),
+        sheet: p.sheet ?? defaultSheet(),
       });
       break;
     }
@@ -192,16 +237,9 @@ export function act(
           ownerId: key.optional(),
           sheet: sheet.optional(),
           assetId: key.nullable().optional(),
-          appearance: z
-            .object({
-              background: color,
-              textColor: color,
-              outlineColor: color,
-              outlineWidth: num.min(0).max(12),
-              shape: z.enum(["circle", "square"]),
-              imageFit: z.enum(["cover", "contain"]),
-            })
-            .optional(),
+          appearance: appearance.optional(),
+          backAssetId: key.nullable().optional(),
+          flipped: z.boolean().optional(),
         })
         .parse(input);
       const t = token(p.id);
@@ -209,10 +247,20 @@ export function act(
       if (p.ownerId && !c.members.some((m) => m.userId === p.ownerId))
         throw new Error("Unknown owner");
       if (p.assetId && p.assetId !== t.assetId) asset(p.assetId);
-      const { assetId, ...updates } = p;
+      if (p.backAssetId && p.backAssetId !== t.backAssetId) asset(p.backAssetId);
+      const { assetId, backAssetId, ...updates } = p;
       Object.assign(t, updates);
       if (assetId === null) delete t.assetId;
       else if (assetId !== undefined) t.assetId = assetId;
+      if (backAssetId === null) delete t.backAssetId;
+      else if (backAssetId !== undefined) t.backAssetId = backAssetId;
+      break;
+    }
+    case "token:flip": {
+      // Show the other side of the token. With no back image the same picture is shown on both sides.
+      const p = z.object({ id: key }).parse(input);
+      const t = token(p.id);
+      t.flipped = !t.flipped;
       break;
     }
     case "token:delete": {
@@ -248,42 +296,83 @@ export function act(
           color: color.optional(),
           portrait: key.optional(),
           art: z.array(key).max(30).optional(),
+          character: characterSchema.nullable().optional(),
         })
         .parse(input);
       if (p.portrait) asset(p.portrait);
       p.art?.forEach(asset);
-      Object.assign(m, p);
+      const { character, ...rest } = p;
+      Object.assign(m, rest);
+      if (character === null) delete m.character; // player removed their character sheet
+      else if (character) {
+        m.character = character;
+        applyCharacterToTokens(c, m);
+      }
       break;
     }
-    case "profile:tree": {
-      const p = z
-        .object({
-          treeId: z.string().max(100),
-          operation: z.enum(["add", "remove", "mark"]),
-          node: z.number().int().min(0).optional(),
-          completed: z.boolean().optional(),
-        })
-        .parse(input);
-      const tree = trees.find((t) => t.id === p.treeId);
-      if (!tree) throw new Error("Unknown tree");
-      const list = (m.trees ??= []);
-      let entry = list.find((t) => t.treeId === p.treeId);
-      if (p.operation === "remove") {
-        m.trees = list.filter((t) => t.treeId !== p.treeId);
+        case "profile:tree": {
+        const p = z
+          .object({
+            treeId: z.string().max(100),
+            operation: z.enum(["add", "remove", "mark"]),
+            node: z.number().int().min(0).optional(),
+            completed: z.boolean().optional(),
+          })
+          .parse(input);
+        const tree = trees.find((t) => t.id === p.treeId);
+        if (!tree) throw new Error("Unknown tree");
+        const list = (m.trees ??= []);
+        let entry = list.find((t) => t.treeId === p.treeId);
+        if (p.operation === "remove") {
+          m.trees = list.filter((t) => t.treeId !== p.treeId);
+          break;
+        }
+        if (!entry) {
+          entry = { treeId: p.treeId, completed: [] };
+          list.push(entry);
+        }
+        if (p.operation === "mark") {
+          if (p.node === undefined || p.node >= tree.nodes || p.completed === undefined)
+            throw new Error("Invalid talent");
+          const done = new Set(entry.completed);
+          if (p.completed) done.add(p.node);
+          else done.delete(p.node);
+          entry.completed = [...done].sort((a, b) => a - b);
+        }
         break;
       }
-      if (!entry) {
-        entry = { treeId: p.treeId, completed: [] };
-        list.push(entry);
+    case "asset:delete": {
+      // Library clean-up: token images and character art only. Scenes are managed with Manage scenes.
+      const p = z.object({ assetId: key }).parse(input);
+      const a = asset(p.assetId);
+      if (a.kind !== "token" && a.kind !== "art")
+        throw new Error("Only token and character images can be deleted here");
+      c.assets = c.assets.filter((x) => x.id !== a.id);
+      // Tokens already on a map keep their place but fall back to a plain marker.
+      for (const t of c.tokens) {
+        if (t.assetId === a.id) delete t.assetId;
+        if (t.backAssetId === a.id) delete t.backAssetId;
       }
-      if (p.operation === "mark") {
-        if (p.node === undefined || p.node >= tree.nodes || p.completed === undefined)
-          throw new Error("Invalid talent");
-        const done = new Set(entry.completed);
-        if (p.completed) done.add(p.node);
-        else done.delete(p.node);
-        entry.completed = [...done].sort((a, b) => a - b);
+      for (const mem of c.members) {
+        if (mem.portrait === a.id) delete mem.portrait;
+        mem.art = mem.art.filter((x) => x !== a.id);
       }
+      break;
+    }
+    case "member:leave": {
+      // A player permanently leaves the table. Their tokens go to the GM.
+      if (m.role === "gm" && c.members.filter((x) => x.role === "gm").length < 2)
+        throw new Error("The GM cannot leave their own table");
+      removeMember(c, m.userId);
+      break;
+    }
+    case "member:remove": {
+      gm();
+      const p = z.object({ userId: key }).parse(input);
+      const target = c.members.find((x) => x.userId === p.userId);
+      if (!target) throw new Error("That player is not at this table");
+      if (target.role === "gm") throw new Error("A GM cannot be removed");
+      removeMember(c, target.userId);
       break;
     }
     case "handout:show": {
@@ -299,15 +388,27 @@ export function act(
       break;
     }
     case "dice:roll": {
-      const pool = z.record(z.string(), num.int().min(0).max(30)).parse(input);
-      const roll = rollPool(pool, randomInt);
+      // Accepts a bare pool ({ability: 2}) or { pool, label?, secret? }. Secret rolls are GM-only and hidden from players.
+      const raw =
+        input && typeof input === "object" && "pool" in input ? input : { pool: input };
+      const p = z
+        .object({
+          pool: z.record(z.string(), num.int().min(0).max(30)),
+          label: z.string().trim().max(60).optional(),
+          secret: z.boolean().optional(),
+        })
+        .parse(raw);
+      if (p.secret) gm();
+      const roll = rollPool(p.pool, randomInt);
       c.messages.push({
         id: id(),
         userId,
         name: m.name,
-        text: "rolled a dice pool",
+        text: p.label ? `rolled ${p.label}` : "rolled a dice pool",
         time: Date.now(),
         roll,
+        ...(p.label ? { label: p.label } : {}),
+        ...(p.secret ? { to: userId, secret: true } : {}),
       });
       break;
     }
@@ -335,8 +436,13 @@ export function act(
           type: z.enum(["PC", "NPC"]),
           success: num.int().min(0).max(100),
           advantage: num.int().min(0).max(100),
+          name: z.string().trim().max(40).optional(),
+          tokenId: key.optional(),
+          hidden: z.boolean().optional(),
         })
         .parse(input);
+      if (p.tokenId && !c.tokens.some((t) => t.id === p.tokenId))
+        throw new Error("Unknown token");
       c.initiative.slots.push({ ...p, id: id(), used: false });
       c.initiative.slots.sort(
         (a, b) =>
@@ -344,6 +450,31 @@ export function act(
           b.advantage - a.advantage ||
           (a.type === "PC" ? -1 : 1),
       );
+      break;
+    }
+    case "initiative:update": {
+      gm();
+      const p = z
+        .object({
+          id: key,
+          hidden: z.boolean().optional(),
+          name: z.string().trim().max(40).optional(),
+        })
+        .parse(input);
+      const slot = c.initiative.slots.find((s) => s.id === p.id);
+      if (!slot) throw new Error("Unknown slot");
+      if (p.hidden !== undefined) slot.hidden = p.hidden;
+      if (p.name !== undefined) {
+        if (p.name) slot.name = p.name;
+        else delete slot.name;
+      }
+      break;
+    }
+    case "initiative:remove": {
+      gm();
+      const p = z.object({ id: key }).parse(input);
+      if (!c.initiative.slots.some((s) => s.id === p.id)) throw new Error("Unknown slot");
+      c.initiative.slots = c.initiative.slots.filter((s) => s.id !== p.id);
       break;
     }
     case "initiative:use": {
@@ -401,17 +532,23 @@ export const events = [
   "token:create",
   "token:move",
   "token:update",
+  "token:flip",
   "token:delete",
   "token:duplicate",
   "token:layer",
   "profile:update",
   "profile:tree",
+  "asset:delete",
+  "member:leave",
+  "member:remove",
   "handout:show",
   "handout:close",
   "dice:roll",
   "destiny:flip",
   "destiny:set",
   "initiative:add",
+  "initiative:update",
+  "initiative:remove",
   "initiative:use",
   "initiative:next",
   "initiative:clear",
