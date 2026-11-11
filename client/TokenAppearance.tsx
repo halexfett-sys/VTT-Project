@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { containCircleFactor } from "./tokenFit";
 import type { Asset, Token, TokenAppearanceStyle } from "../shared/types";
 import { assetUrl, upload } from "./api";
 type Props = {
@@ -34,7 +35,7 @@ export default function TokenAppearance({
     outlineColor: ownerColor,
     outlineWidth: 2,
     shape: "circle",
-    imageFit: "cover",
+    imageFit: "contain",
   };
   const [style, setStyle] = useState(token.appearance || defaults),
     [image, setImage] = useState<string | null>(token.assetId || null),
@@ -46,6 +47,7 @@ export default function TokenAppearance({
     [side, setSide] = useState<"front" | "back">("front"),
     [uploaded, setUploaded] = useState<Asset[]>([]);
   const [touched, setTouched] = useState(false);
+  const [natural, setNatural] = useState({ w: 1, h: 1 });
   const change = (p: Partial<TokenAppearanceStyle>) => {
     setStyle((s) => ({ ...s, ...p }));
     setTouched(true);
@@ -117,9 +119,17 @@ export default function TokenAppearance({
             <img
               src={assetUrl(room, faceImage)}
               alt={`Token ${side} preview`}
+              onLoad={(e) =>
+                setNatural({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })
+              }
               style={{
                 objectFit: style.imageFit,
-                transform: `translate(${shiftX * 50}%, ${shiftY * 50}%) scale(${zoom})`,
+                transform: `translate(${shiftX * 50}%, ${shiftY * 50}%) scale(${
+                  zoom *
+                  (style.imageFit !== "cover" && style.shape === "circle"
+                    ? containCircleFactor(natural.w, natural.h)
+                    : 1)
+                })`,
               }}
             />
           ) : (

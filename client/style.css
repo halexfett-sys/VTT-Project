@@ -1973,3 +1973,8 @@ h1,h2,h3,.brand {font-family:Starjhol,SWEuro,sans-serif;letter-spacing:.04em;}
 .notes-panel header button { border: 0; background: none; font-size: 18px; line-height: 1; padding: 0 4px; color: #9badb9; }
 .notes-panel textarea { flex: 1; resize: none; border: 0; border-radius: 0; background: transparent; padding: 10px; font-size: 13px; line-height: 1.5; min-height: 0; }
 .notes-panel footer { padding: 4px 10px 6px; font-size: 9px; color: #8d9ea9; border-top: 1px solid #2f3d48; }
+
+/* Portraits in the crew manifest */
+.crew-faces > span, .crew-popover .crew-row > span { overflow: hidden; }
+.crew-faces > span img, .crew-popover .crew-row > span img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.crew-faces > span { width: 30px; height: 30px; }

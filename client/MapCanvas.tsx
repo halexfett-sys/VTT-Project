@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { Campaign, Point, Token } from "../shared/types";
 import { assetUrl } from "./api";
+import { containCircleFactor } from "./tokenFit";
 export type Tool = "select" | "pan" | "ruler" | "hide" | "reveal" | "range";
 type Props = {
   state: Campaign;
@@ -270,10 +271,14 @@ export default function MapCanvas({
           shiftY = ((ownBack ? ap?.backImageY : ap?.imageY) ?? 0) * (size / 2);
         const art = faceId ? image(faceId) : null;
         if (art) {
+          // Whole image by default. Only "Fill and crop" cuts the picture to the token.
           const ratio =
-            t.appearance?.imageFit === "contain"
-              ? Math.min(size / art.width, size / art.height)
-              : Math.max(size / art.width, size / art.height);
+            t.appearance?.imageFit === "cover"
+              ? Math.max(size / art.width, size / art.height)
+              : Math.min(size / art.width, size / art.height) *
+                (t.appearance?.shape === "square"
+                  ? 1
+                  : containCircleFactor(art.width, art.height));
           const w = art.width * ratio * zoom,
             h = art.height * ratio * zoom;
           ctx.drawImage(art, -w / 2 + shiftX, -h / 2 + shiftY, w, h);

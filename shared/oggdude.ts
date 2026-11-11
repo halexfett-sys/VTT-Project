@@ -100,13 +100,20 @@ const knownNames: Record<string, string> = {
   BOTHAN: "Bothan", DROID: "Droid", GAND: "Gand", HUMAN: "Human", RODIAN: "Rodian", TRANDOSHAN: "Trandoshan",
   TWILEK: "Twi'lek", WOOKIEE: "Wookiee", MONCALAMARI: "Mon Calamari", SULLUSTAN: "Sullustan", CEREAN: "Cerean",
   KELDOR: "Kel Dor", ZABRAK: "Zabrak", TOGRUTA: "Togruta", MIRIALAN: "Mirialan",
+  // Short codes as they appear in real OggDude files.
+  TWI: "Twi'lek", SMUG: "Smuggler",
 };
 const speciesBase: Record<string, { wounds: number; strain: number }> = {
   HUMAN: { wounds: 10, strain: 10 }, BOTHAN: { wounds: 10, strain: 11 }, DROID: { wounds: 10, strain: 10 },
   GAND: { wounds: 10, strain: 10 }, RODIAN: { wounds: 10, strain: 10 }, TRANDOSHAN: { wounds: 12, strain: 9 },
-  TWILEK: { wounds: 10, strain: 11 }, WOOKIEE: { wounds: 14, strain: 8 },
+  TWILEK: { wounds: 10, strain: 11 }, TWI: { wounds: 10, strain: 11 }, WOOKIEE: { wounds: 14, strain: 8 },
 };
-const display = (raw: string) => knownNames[keyNorm(raw)] ?? prettyKey(raw);
+/** A short all-capitals code we have no name for is shown as it is, rather than as a misleading "Smug" or "Twi". */
+const looksLikeCode = (raw: string) => /^[A-Z0-9_]{2,8}$/.test(raw.trim());
+const display = (raw: string) =>
+  knownNames[keyNorm(raw)] ?? (looksLikeCode(raw) ? raw.trim() : prettyKey(raw));
+/** Specialization keys are whole words (ASSASSIN, CHARMER), so they are simply capitalised. */
+const displayWord = (raw: string) => knownNames[keyNorm(raw)] ?? prettyKey(raw);
 /** Species or career: look inside the block for a name or key, or take its text, and fall back to a key anywhere in the file. */
 function identity(doc: XNode, block: string, nameTag: string, keyTag: string): string {
   const n = all(doc, block)[0];
@@ -130,19 +137,27 @@ export function importOggDude(xml: string): ImportResult {
   c.species = identity(doc, "Species", "SpeciesName", "SpeciesKey") || undefined;
   c.career = identity(doc, "Career", "CareerName", "CareerKey") || undefined;
   if (!c.species) warnings.push("The species was not found in this file.");
+  else if (looksLikeCode(c.species) && !knownNames[keyNorm(c.species)])
+    warnings.push(`The species is stored as the code "${c.species}"; please type its full name.`);
   if (!c.career) warnings.push("The career was not found in this file.");
+  else if (looksLikeCode(c.career) && !knownNames[keyNorm(c.career)])
+    warnings.push(`The career is stored as the code "${c.career}"; please type its full name.`);
   const career = all(doc, "Career")[0];
 
   const specs = new Set<string>();
+  const specName = (x: XNode) => text(first(x, "n")) || text(first(x, "Name")) || text(first(x, "Key"));
+  const listed = all(doc, "CharSpecialization");
+  for (const sp of [...listed.filter((x) => text(first(x, "isStartingSpec")) === "true"), ...listed])
+    specs.add(displayWord(specName(sp)));
   if (career) {
     for (const s of all(career, "CharSpecialization"))
-      specs.add(display(text(first(s, "Name")) || text(first(s, "Key"))));
-    for (const s of all(career, "SpecializationKey")) specs.add(display(text(s)));
+      specs.add(displayWord(specName(s)));
+    for (const s of all(career, "SpecializationKey")) specs.add(displayWord(text(s)));
     const holder = first(career, "Specializations");
     if (holder && !specs.size)
       for (const k of holder.kids) {
         const v = text(first(k, "Key")) || text(k);
-        if (v) specs.add(display(v));
+        if (v) specs.add(displayWord(v));
       }
   }
   c.specializations = [...specs].filter(Boolean).slice(0, 20);
@@ -194,13 +209,15 @@ export function importOggDude(xml: string): ImportResult {
 
   // Derived numbers. Look for a plain tag, a block with a current/maximum inside, or a keyed entry such as <Key>SOAK</Key>.
   const fromBlock = (n: XNode): number | undefined => {
-    if (!n.kids.length) return num(n.text);
+    if (!n.kids.length) return n.text.trim() === "" ? 0 : num(n.text);
     for (const t of ["Threshold", "Max", "Maximum", "Total", "TotalRanks", "Value", "Current"]) {
       const v = firstNum(n, t);
       if (v !== undefined) return v;
     }
-    const r = totalRanks(n);
-    return r || undefined;
+    if (first(n, "Rank") || first(n, "Ranks")) return totalRanks(n) || undefined;
+    // OggDude stores a derived number as parts, e.g. StartingRanks + SpeciesRanks + TalentRanks. Add the numeric parts up.
+    const parts = n.kids.map((k) => num(text(k))).filter((v): v is number => v !== undefined);
+    return parts.length ? parts.reduce((a, b) => a + b, 0) : undefined;
   };
   const everyNode = (n: XNode): XNode[] => [n, ...n.kids.flatMap(everyNode)];
   const stat = (tags: string[], keyed: RegExp): number | undefined => {
@@ -209,7 +226,7 @@ export function importOggDude(xml: string): ImportResult {
       if (node) return fromBlock(node);
     }
     for (const n of everyNode(doc)) {
-      const label = text(first(n, "Key")) || text(first(n, "Name"));
+      const label = text(first(n, "Key")) || text(first(n, "n")) || text(first(n, "Name"));
       if (label && keyed.test(keyNorm(label))) {
         const v = fromBlock(n);
         if (v !== undefined) return v;

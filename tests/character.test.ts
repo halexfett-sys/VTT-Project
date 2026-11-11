@@ -116,3 +116,27 @@ test('Riding is not a skill: not in the list, not imported, hidden on older shee
  const old=emptyCharacter();old.skills=[{key:'RIDE',name:'Riding',characteristic:'agility',rank:2,career:false}];
  assert.ok(!withAllSkills(old).some(s=>s.key==='RIDE'));
 });
+
+test('a real OggDude export: coded species/career, specializations in <n>, and stats stored as rank parts',()=>{
+ const real=`<?xml version="1.0"?><Character><Description><CharName>Nikita Maska</CharName></Description>
+ <Characteristics><CharCharacteristic><Key>BR</Key><n>Brawn</n><Rank><SpeciesRanks>1</SpeciesRanks></Rank></CharCharacteristic>
+ <CharCharacteristic><Key>WIL</Key><n>Willpower</n><Rank><SpeciesRanks>2</SpeciesRanks><PurchasedRanks>1</PurchasedRanks></Rank></CharCharacteristic></Characteristics>
+ <Specializations><CharSpecialization><Key>CHARMER</Key><n>Charmer</n><isStartingSpec>true</isStartingSpec></CharSpecialization>
+ <CharSpecialization><Key>INTERROGATOR</Key><n>Interrogator</n></CharSpecialization></Specializations>
+ <Attributes><SoakValue><StartingRanks>1</StartingRanks><PurchasedRanks>2</PurchasedRanks></SoakValue>
+ <WoundThreshold><StartingRanks>1</StartingRanks><SpeciesRanks>10</SpeciesRanks></WoundThreshold>
+ <StrainThreshold><StartingRanks>3</StartingRanks><SpeciesRanks>11</SpeciesRanks><TalentRanks>4</TalentRanks></StrainThreshold>
+ <DefenseRanged /><DefenseMelee /><ForceRating /></Attributes>
+ <Species><SpeciesKey>TWI</SpeciesKey><SubSpeciesKey /></Species>
+ <Career><CareerKey>SMUG</CareerKey><StartingSpecKey>CHARMER</StartingSpecKey></Career><Credits>34232</Credits></Character>`;
+ const {character:c,warnings}=importOggDude(real);
+ assert.equal(c.species,"Twi'lek");assert.equal(c.career,'Smuggler');
+ assert.deepEqual(c.specializations,['Charmer','Interrogator']);
+ assert.deepEqual([c.soak,c.woundThreshold,c.strainThreshold,c.defenseRanged,c.defenseMelee],[3,11,18,0,0]);
+ assert.deepEqual(warnings.filter(w=>/species|career|worked out|fill in/.test(w)),[]); // nothing about identity or stats
+});
+test('an unrecognised species or career code is kept as written and flagged',()=>{
+ const {character:c,warnings}=importOggDude('<Character><Species><SpeciesKey>XYZ</SpeciesKey></Species><Career><CareerKey>QQ</CareerKey></Career></Character>');
+ assert.equal(c.species,'XYZ');assert.equal(c.career,'QQ');
+ assert.equal(warnings.filter(w=>/stored as the code/.test(w)).length,2);
+});

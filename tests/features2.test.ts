@@ -138,3 +138,18 @@ test("fog brush covers the same area for players even if the stored picture size
  assert.ok(!fogged(1500,500)); // far away stays clear
  assert.ok(!fogged(500,800));
 });
+
+test("every player's portrait is sent to the whole crew so the crew manifest can show it",()=>{
+ const {c,gm,player}=tokenFixture();
+ const a:Asset={id:id(),ownerId:gm,kind:"portrait" as any,name:"gm.png",width:10,height:10};
+ c.assets.push(a);
+ act(c,gm,"profile:update",{portrait:a.id});
+ assert.ok(viewFor(c,player).assets.some(x=>x.id===a.id));
+});
+test("whole-image fit never clips a picture inside a round token",async()=>{
+ const {containCircleFactor}=await import("../client/tokenFit");
+ assert.ok(Math.abs(containCircleFactor(100,100)-Math.SQRT1_2)<1e-9);
+ const f=containCircleFactor(100,200); // the picture's corners must land on or inside the circle
+ const fit=1/200*f, w=100*fit, h=200*fit;
+ assert.ok(Math.hypot(w,h)<=1+1e-9);
+});

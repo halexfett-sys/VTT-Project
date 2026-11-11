@@ -551,7 +551,11 @@ export default function App() {
                   title={`${m.name} · ${m.role}`}
                   style={{ borderColor: m.color }}
                 >
-                  {m.name.slice(0, 2)}
+                  {m.portrait ? (
+                    <img src={assetUrl(room, m.portrait)} alt={m.name} />
+                  ) : (
+                    m.name.slice(0, 2)
+                  )}
                 </span>
               ))}
               <small>{state.members.length} members</small>
@@ -564,7 +568,13 @@ export default function App() {
                     .filter((m) => m.role !== "gm")
                     .map((m) => (
                       <div className="crew-row" key={m.userId}>
-                        <span style={{ borderColor: m.color }}>{m.name.slice(0, 2)}</span>
+                        <span style={{ borderColor: m.color }}>
+                          {m.portrait ? (
+                            <img src={assetUrl(room, m.portrait)} alt="" />
+                          ) : (
+                            m.name.slice(0, 2)
+                          )}
+                        </span>
                         <em>{m.name}</em>
                         <button
                           className="danger-button"
