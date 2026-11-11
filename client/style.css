@@ -1937,3 +1937,39 @@ h1,h2,h3,.brand {font-family:Starjhol,SWEuro,sans-serif;letter-spacing:.04em;}
   background: #1d3040; border: 1px solid #5b8fb0; color: #dff1ff; opacity: .85;
 }
 .asset-quick:hover, .asset-quick:focus-visible { opacity: 1; background: #2a4a63; }
+
+/* One Save for the token editor, always visible while the form scrolls */
+.modal-savebar {
+  position: sticky; bottom: 0; z-index: 3;
+  display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+  margin: 8px -30px -30px; padding: 12px 30px 16px;
+  background: #18222c; border-top: 1px solid #35444f;
+}
+.token-name-preview { text-align: center; font-size: 12px; margin: 4px 0 8px; text-shadow: 0 0 3px #000, 0 1px 2px #000; }
+
+/* Range band color choices */
+.range-colors { display: flex; align-items: center; gap: 5px; }
+.range-colors .swatch { width: 20px; height: 20px; padding: 0; border-radius: 50%; border: 2px solid #4b5965; }
+.range-colors .swatch.active { border-color: #fff; box-shadow: 0 0 0 2px #f2be7488; }
+.range-colors input[type="color"] { width: 28px; height: 24px; padding: 0; }
+
+/* Personal notes, floating at the left edge of the map */
+.map-area { position: relative; }
+.notes-tab {
+  position: absolute; left: 0; top: 96px; z-index: 12;
+  writing-mode: vertical-rl;
+  padding: 12px 7px; font-size: 11px; letter-spacing: 1.5px;
+  background: #1a2631ee; border: 1px solid #4b5965; border-left: 0; border-radius: 0 6px 6px 0;
+}
+.notes-panel {
+  position: absolute; left: 10px; top: 96px; z-index: 12;
+  width: 270px; min-width: 200px; max-width: 70%; height: 320px; min-height: 160px; max-height: 80%;
+  display: flex; flex-direction: column; resize: both; overflow: hidden;
+  background: #18222cf2; border: 1px solid #4b5965; border-radius: 8px; box-shadow: 0 12px 40px #0009;
+}
+.notes-panel header { display: flex; align-items: baseline; gap: 8px; padding: 9px 10px 7px; border-bottom: 1px solid #2f3d48; }
+.notes-panel header strong { font-size: 10px; letter-spacing: 1.4px; }
+.notes-panel header small { font-size: 9px; color: #8d9ea9; flex: 1; }
+.notes-panel header button { border: 0; background: none; font-size: 18px; line-height: 1; padding: 0 4px; color: #9badb9; }
+.notes-panel textarea { flex: 1; resize: none; border: 0; border-radius: 0; background: transparent; padding: 10px; font-size: 13px; line-height: 1.5; min-height: 0; }
+.notes-panel footer { padding: 4px 10px 6px; font-size: 9px; color: #8d9ea9; border-top: 1px solid #2f3d48; }

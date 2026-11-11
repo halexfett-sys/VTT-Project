@@ -73,7 +73,14 @@ export function canEdit(c: Campaign, userId: string, t: Token) {
 }
 export function viewFor(c: Campaign, userId: string): Campaign {
   const gm = c.members.some((m) => m.userId === userId && m.role === "gm");
-  if (gm) return structuredClone(c);
+  // Personal notes belong to their writer alone, GM included.
+  const mine = (members: Campaign["members"]) =>
+    members.map((m) => (m.userId === userId ? m : { ...m, notes: undefined }));
+  if (gm) {
+    const copy = structuredClone(c);
+    copy.members = mine(copy.members);
+    return copy;
+  }
   const tokens = c.tokens.filter(
     (t) =>
       t.mapId === c.activeMapId &&
@@ -93,6 +100,7 @@ export function viewFor(c: Campaign, userId: string): Campaign {
   ]);
   return {
     ...structuredClone(c),
+    members: mine(structuredClone(c.members)),
     invite: "",
     initiative: {
       ...c.initiative,

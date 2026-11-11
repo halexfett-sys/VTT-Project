@@ -8,6 +8,7 @@ type Props = {
   tool: Tool;
   brush: number;
   rangeBase: number;
+  rangeColor?: string;
   selected: string;
   onSelect: (id: string) => void;
   send: (event: string, payload: unknown) => void;
@@ -19,6 +20,7 @@ export default function MapCanvas({
   tool,
   brush,
   rangeBase,
+  rangeColor = "#f2be74",
   selected,
   onSelect,
   send,
@@ -32,6 +34,7 @@ export default function MapCanvas({
       tool,
       brush,
   rangeBase,
+      rangeColor,
       selected,
       onSelect,
       send,
@@ -43,6 +46,7 @@ export default function MapCanvas({
     tool,
     brush,
   rangeBase,
+    rangeColor,
     selected,
     onSelect,
     send,
@@ -296,9 +300,14 @@ export default function MapCanvas({
         ctx.restore();
         ctx.font = `${14 / cam.zoom}px SWEuro, sans-serif`;
         ctx.textAlign = "center";
-        ctx.fillStyle = "#e6edf0";
+        ctx.lineJoin = "round";
+        ctx.lineWidth = 3.5 / cam.zoom;
+        ctx.strokeStyle = "#05090dd9";
+        ctx.strokeText(t.name, p.x, p.y + size / 2 + 18 / cam.zoom);
+        ctx.fillStyle = t.appearance?.nameColor || "#e6edf0";
         ctx.fillText(t.name, p.x, p.y + size / 2 + 18 / cam.zoom);
         if (t.status) {
+          ctx.strokeText(t.status, p.x, p.y - size / 2 - 10 / cam.zoom);
           ctx.fillStyle = "#efb66e";
           ctx.fillText(t.status, p.x, p.y - size / 2 - 10 / cam.zoom);
         }
@@ -324,14 +333,27 @@ export default function MapCanvas({
           ruler.b.y - 12 / cam.zoom,
         );
         if (current.current.tool === "range") {
+          const ringColor = current.current.rangeColor || "#f2be74";
           ["Engaged", "Short", "Medium", "Long", "Extreme"].forEach(
             (name, i) => {
               const radius = [1, 3, 6, 10, 15][i] * current.current.rangeBase;
-              ctx.globalAlpha = 0.4;
               ctx.beginPath();
               ctx.arc(ruler.a.x, ruler.a.y, radius, 0, Math.PI * 2);
+              // A dark halo under the colored ring keeps it readable on light and dark maps alike.
+              ctx.globalAlpha = 0.55;
+              ctx.strokeStyle = "#05090d";
+              ctx.lineWidth = 5 / cam.zoom;
+              ctx.stroke();
+              ctx.globalAlpha = 0.9;
+              ctx.strokeStyle = ringColor;
+              ctx.lineWidth = 2.5 / cam.zoom;
               ctx.stroke();
               ctx.globalAlpha = 1;
+              ctx.lineJoin = "round";
+              ctx.strokeStyle = "#05090d";
+              ctx.lineWidth = 4 / cam.zoom;
+              ctx.strokeText(name, ruler.a.x + radius + 5, ruler.a.y);
+              ctx.fillStyle = ringColor;
               ctx.fillText(name, ruler.a.x + radius + 5, ruler.a.y);
             },
           );

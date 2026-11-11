@@ -231,7 +231,7 @@ export default function TokenDraftModal({
               onChange={(e) => setSheet((s) => ({ ...s, notes: e.target.value }))}
             />
           </label>
-          <div className="two-col">
+          <div className="modal-savebar">
             <button type="button" onClick={onClose}>
               Cancel
             </button>

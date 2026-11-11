@@ -16,7 +16,7 @@ type Props = {
     onChange: (v: {
       assetId: string | null;
       backAssetId: string | null;
-      appearance: TokenAppearanceStyle;
+      appearance?: TokenAppearanceStyle;
     }) => void;
   };
 };
@@ -45,14 +45,21 @@ export default function TokenAppearance({
     [backImage, setBackImage] = useState<string | null>(token.backAssetId || null),
     [side, setSide] = useState<"front" | "back">("front"),
     [uploaded, setUploaded] = useState<Asset[]>([]);
-  useEffect(() => {
-    draft?.onChange({ assetId: image, backAssetId: backImage, appearance: style });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [image, backImage, style]);
+  const [touched, setTouched] = useState(false);
   const change = (p: Partial<TokenAppearanceStyle>) => {
     setStyle((s) => ({ ...s, ...p }));
+    setTouched(true);
     setSaved(false);
   };
+  useEffect(() => {
+    // Colors and outline are only sent once changed, so tokens nobody restyled keep their default look.
+    draft?.onChange({
+      assetId: image,
+      backAssetId: backImage,
+      appearance: touched || token.appearance ? style : undefined,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [image, backImage, style, touched]);
   // Which face is being edited. A back face only has its own zoom/position once a back image is chosen.
   const editingBack = side === "back" && Boolean(backImage);
   const faceImage = side === "back" ? backImage || image : image;
@@ -119,6 +126,9 @@ export default function TokenAppearance({
             <span>{token.name.slice(0, 2).toUpperCase()}</span>
           )}
         </div>
+      </div>
+      <div className="token-name-preview" style={{ color: style.nameColor || "#e6edf0" }}>
+        {token.name}
       </div>
       <div className="face-tabs" role="tablist" aria-label="Token side">
         {(["front", "back"] as const).map((s) => (
@@ -253,7 +263,7 @@ export default function TokenAppearance({
           No back image yet. Flipping the token shows the front image on both sides.
         </p>
       )}
-      {!draft && (
+      {token.id !== "draft" && (
         <button
           type="button"
           className="full"
@@ -263,24 +273,30 @@ export default function TokenAppearance({
         </button>
       )}
       <div className="two-col">
-        {(["background", "textColor", "outlineColor"] as const).map((k) => (
-          <label className="field" key={k}>
-            <span>
-              {
-                {
-                  background: "Background color",
-                  textColor: "Initials color",
-                  outlineColor: "Outline color",
-                }[k]
-              }
-            </span>
-            <input
-              type="color"
-              value={style[k]}
-              onChange={(e) => change({ [k]: e.target.value })}
-            />
-          </label>
-        ))}
+        <label className="field">
+          <span>Background color</span>
+          <input
+            type="color"
+            value={style.background}
+            onChange={(e) => change({ background: e.target.value })}
+          />
+        </label>
+        <label className="field">
+          <span>Text color (name and initials)</span>
+          <input
+            type="color"
+            value={style.nameColor || "#e6edf0"}
+            onChange={(e) => change({ nameColor: e.target.value, textColor: e.target.value })}
+          />
+        </label>
+        <label className="field">
+          <span>Outline color</span>
+          <input
+            type="color"
+            value={style.outlineColor}
+            onChange={(e) => change({ outlineColor: e.target.value })}
+          />
+        </label>
         <label className="field">
           <span>Outline thickness ({style.outlineWidth}px)</span>
           <input
@@ -327,6 +343,7 @@ export default function TokenAppearance({
           disabled={saving || busy}
           onClick={() => {
             setStyle(defaults);
+            setTouched(true);
             setSaved(false);
           }}
         >

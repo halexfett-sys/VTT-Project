@@ -65,6 +65,7 @@ test('initiative slots can name a token, be hidden from players, edited and remo
 });
 
 import { characterSchema } from "../shared/character";
+import { memberSchema } from "../server/save-schema";
 const tokenFixture = () => {
   const gm = id(), player = id(), c = newCampaign("Test", gm, "GM");
   c.members.push({ userId: player, name: "Player", color: "#ffffff", role: "player", art: [] });
@@ -111,4 +112,29 @@ test("character stats go only to the token named like the character when a playe
   act(c, player, "profile:update", { character: ch });
   assert.equal(c.tokens.find((t) => t.name === "Kira")!.sheet.soak, 6);
   assert.equal(c.tokens.find((t) => t.name === "Droid")!.sheet.soak, 0);
+});
+
+test("personal notes are only ever sent to their owner, GM included",()=>{
+ const {c,gm,player}=tokenFixture();
+ act(c,player,"profile:update",{notes:"my secret plan"});
+ act(c,gm,"profile:update",{notes:"gm prep"});
+ const pv=viewFor(c,player).members,gv=viewFor(c,gm).members;
+ assert.equal(pv.find(m=>m.userId===player)!.notes,"my secret plan");
+ assert.equal(pv.find(m=>m.userId===gm)!.notes,undefined);
+ assert.equal(gv.find(m=>m.userId===gm)!.notes,"gm prep");
+ assert.equal(gv.find(m=>m.userId===player)!.notes,undefined);
+ assert.equal(c.members.find(m=>m.userId===player)!.notes,"my secret plan"); // still stored
+ assert.throws(()=>act(c,player,"profile:update",{notes:"x".repeat(10001)}));
+ assert.ok(memberSchema.parse(c.members[1]).notes);
+});
+test("fog brush covers the same area for players even if the stored picture size differs from the map size",async()=>{
+ const sharp=(await import("sharp")).default,{renderMap}=await import("../server/map-image");
+ const img=await sharp({create:{width:2000,height:1000,channels:3,background:{r:200,g:180,b:120}}}).webp().toBuffer();
+ const map:any={id:"m",name:"t",assetId:"a",width:1000,height:500,grid:{type:"square",size:64,offsetX:0,offsetY:0,color:"#fff",snap:true},fog:[{id:"f",erase:false,size:100,points:[{x:250,y:250}]}]};
+ const out=await renderMap(map,{get:async()=>img} as any,true);
+ const raw=await sharp(out).raw().toBuffer({resolveWithObject:true});
+ const fogged=(x:number,y:number)=>{const i=(y*raw.info.width+x)*raw.info.channels;return Math.abs(raw.data[i]-8)<10&&Math.abs(raw.data[i+1]-12)<10;};
+ assert.ok(fogged(500,500)); // map (250,250) is image (500,500)
+ assert.ok(!fogged(1500,500)); // far away stays clear
+ assert.ok(!fogged(500,800));
 });

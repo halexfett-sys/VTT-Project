@@ -57,7 +57,6 @@ export const skillDefs: SkillDef[] = [
   { key: "PILOTPL", name: "Piloting (Planetary)", characteristic: "agility", group: "General" },
   { key: "PILOTSP", name: "Piloting (Space)", characteristic: "agility", group: "General" },
   { key: "RESIL", name: "Resilience", characteristic: "brawn", group: "General" },
-  { key: "RIDE", name: "Riding", characteristic: "agility", group: "General" },
   { key: "SKUL", name: "Skulduggery", characteristic: "cunning", group: "General" },
   { key: "STEAL", name: "Stealth", characteristic: "agility", group: "General" },
   { key: "SW", name: "Streetwise", characteristic: "cunning", group: "General", aliases: ["STREETWISE", "STREET"] },
@@ -78,6 +77,8 @@ export const skillDefs: SkillDef[] = [
   { key: "XEN", name: "Xenology", characteristic: "intellect", group: "Knowledge", aliases: ["XENOLOGY"] },
 ];
 
+/** Skills that are not part of this game. They are ignored on import and hidden on older saved sheets. */
+export const retiredSkills = new Set(["RIDE", "RIDING"]);
 const norm = (s: string) => s.toUpperCase().replace(/[^A-Z0-9]/g, "");
 const byKey = new Map<string, SkillDef>();
 for (const d of skillDefs) {
@@ -157,7 +158,9 @@ export function withAllSkills(c: Character): CharSkill[] {
       : { key: d.key, name: d.name, characteristic: d.characteristic, rank: 0, career: false };
   });
   const known = new Set(skillDefs.map((d) => norm(d.key)));
-  for (const s of c.skills) if (!known.has(norm(s.key))) out.push(s); // custom/unknown skills
+  for (const s of c.skills)
+    if (!known.has(norm(s.key)) && !retiredSkills.has(norm(s.key)) && !retiredSkills.has(norm(s.name)))
+      out.push(s); // custom/unknown skills
   return out;
 }
 

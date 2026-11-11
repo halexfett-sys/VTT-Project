@@ -3,6 +3,7 @@ import {
   characterSchema,
   emptyCharacter,
   findSkill,
+  retiredSkills,
   type CharKey,
   type CharSkill,
   type Character,
@@ -89,8 +90,32 @@ export function prettyKey(k: string) {
     .toLowerCase()
     .replace(/\b[a-z]/g, (c) => c.toUpperCase());
 }
-const nameOrKey = (n: XNode | undefined, keyName: string, nameName: string) =>
-  n ? prettyKey(text(first(n, nameName)) || text(first(n, keyName))) : "";
+const keyNorm = (k: string) => k.toUpperCase().replace(/[^A-Z0-9]/g, "");
+/** Proper display names for the identifiers OggDude uses, and the base wound/strain thresholds of species whose numbers are well known. */
+const knownNames: Record<string, string> = {
+  BOUNTYHUNTER: "Bounty Hunter", COLONIST: "Colonist", EXPLORER: "Explorer", HIREDGUN: "Hired Gun",
+  SMUGGLER: "Smuggler", TECHNICIAN: "Technician", ACE: "Ace", COMMANDER: "Commander", DIPLOMAT: "Diplomat",
+  ENGINEER: "Engineer", SOLDIER: "Soldier", SPY: "Spy", CONSULAR: "Consular", GUARDIAN: "Guardian",
+  MYSTIC: "Mystic", SEEKER: "Seeker", SENTINEL: "Sentinel", WARRIOR: "Warrior",
+  BOTHAN: "Bothan", DROID: "Droid", GAND: "Gand", HUMAN: "Human", RODIAN: "Rodian", TRANDOSHAN: "Trandoshan",
+  TWILEK: "Twi'lek", WOOKIEE: "Wookiee", MONCALAMARI: "Mon Calamari", SULLUSTAN: "Sullustan", CEREAN: "Cerean",
+  KELDOR: "Kel Dor", ZABRAK: "Zabrak", TOGRUTA: "Togruta", MIRIALAN: "Mirialan",
+};
+const speciesBase: Record<string, { wounds: number; strain: number }> = {
+  HUMAN: { wounds: 10, strain: 10 }, BOTHAN: { wounds: 10, strain: 11 }, DROID: { wounds: 10, strain: 10 },
+  GAND: { wounds: 10, strain: 10 }, RODIAN: { wounds: 10, strain: 10 }, TRANDOSHAN: { wounds: 12, strain: 9 },
+  TWILEK: { wounds: 10, strain: 11 }, WOOKIEE: { wounds: 14, strain: 8 },
+};
+const display = (raw: string) => knownNames[keyNorm(raw)] ?? prettyKey(raw);
+/** Species or career: look inside the block for a name or key, or take its text, and fall back to a key anywhere in the file. */
+function identity(doc: XNode, block: string, nameTag: string, keyTag: string): string {
+  const n = all(doc, block)[0];
+  const direct =
+    (n && (text(first(n, nameTag)) || text(first(n, "Name")) || text(first(n, keyTag)) || text(first(n, "Key")))) ||
+    (n && !n.kids.length ? n.text.trim() : "") ||
+    firstText(doc, nameTag, keyTag);
+  return direct ? display(direct) : "";
+}
 
 export type ImportResult = { character: Character; warnings: string[] };
 
@@ -102,21 +127,22 @@ export function importOggDude(xml: string): ImportResult {
   const c = emptyCharacter();
 
   c.name = firstText(doc, "CharName") || undefined;
-  const species = first(doc, "Species");
-  c.species = nameOrKey(species, "SpeciesKey", "SpeciesName") || undefined;
-  const career = first(doc, "Career");
-  c.career = nameOrKey(career, "CareerKey", "CareerName") || undefined;
+  c.species = identity(doc, "Species", "SpeciesName", "SpeciesKey") || undefined;
+  c.career = identity(doc, "Career", "CareerName", "CareerKey") || undefined;
+  if (!c.species) warnings.push("The species was not found in this file.");
+  if (!c.career) warnings.push("The career was not found in this file.");
+  const career = all(doc, "Career")[0];
 
   const specs = new Set<string>();
   if (career) {
     for (const s of all(career, "CharSpecialization"))
-      specs.add(nameOrKey(s, "Key", "Name"));
-    for (const s of all(career, "SpecializationKey")) specs.add(prettyKey(text(s)));
+      specs.add(display(text(first(s, "Name")) || text(first(s, "Key"))));
+    for (const s of all(career, "SpecializationKey")) specs.add(display(text(s)));
     const holder = first(career, "Specializations");
     if (holder && !specs.size)
       for (const k of holder.kids) {
         const v = text(first(k, "Key")) || text(k);
-        if (v) specs.add(prettyKey(v));
+        if (v) specs.add(display(v));
       }
   }
   c.specializations = [...specs].filter(Boolean).slice(0, 20);
@@ -144,7 +170,7 @@ export function importOggDude(xml: string): ImportResult {
   const unknown: string[] = [];
   for (const sk of all(doc, "CharSkill")) {
     const key = text(first(sk, "Key"));
-    if (!key) continue;
+    if (!key || retiredSkills.has(keyNorm(key))) continue;
     const def = findSkill(key);
     const rank = Math.min(10, Math.max(0, totalRanks(sk)));
     const isCareer =
@@ -166,23 +192,65 @@ export function importOggDude(xml: string): ImportResult {
       `Unrecognised skills were added with Intellect as the characteristic: ${unknown.join(", ")}.`,
     );
 
-  const derived = {
-    soak: firstNum(doc, "Soak", "SoakValue", "TotalSoak"),
-    woundThreshold: firstNum(doc, "WoundThreshold", "Wounds"),
-    strainThreshold: firstNum(doc, "StrainThreshold", "Strain"),
-    defenseRanged: firstNum(doc, "DefenseRanged", "RangedDefense", "DefRanged"),
-    defenseMelee: firstNum(doc, "DefenseMelee", "MeleeDefense", "DefMelee"),
+  // Derived numbers. Look for a plain tag, a block with a current/maximum inside, or a keyed entry such as <Key>SOAK</Key>.
+  const fromBlock = (n: XNode): number | undefined => {
+    if (!n.kids.length) return num(n.text);
+    for (const t of ["Threshold", "Max", "Maximum", "Total", "TotalRanks", "Value", "Current"]) {
+      const v = firstNum(n, t);
+      if (v !== undefined) return v;
+    }
+    const r = totalRanks(n);
+    return r || undefined;
   };
-  const missing: string[] = [];
-  for (const [k, v] of Object.entries(derived)) {
-    if (v === undefined) missing.push(k);
-    else (c as Record<string, unknown>)[k] = Math.max(0, Math.min(99, Math.round(v)));
+  const everyNode = (n: XNode): XNode[] => [n, ...n.kids.flatMap(everyNode)];
+  const stat = (tags: string[], keyed: RegExp): number | undefined => {
+    for (const t of tags) {
+      const node = all(doc, t).find((x) => fromBlock(x) !== undefined);
+      if (node) return fromBlock(node);
+    }
+    for (const n of everyNode(doc)) {
+      const label = text(first(n, "Key")) || text(first(n, "Name"));
+      if (label && keyed.test(keyNorm(label))) {
+        const v = fromBlock(n);
+        if (v !== undefined) return v;
+      }
+    }
+    return undefined;
+  };
+  const derived = {
+    soak: stat(["Soak", "SoakValue", "TotalSoak"], /^(SOAK|SOAKVALUE)$/),
+    woundThreshold: stat(["WoundThreshold", "WoundsThreshold", "WoundThresholdTotal", "Wounds"], /^(WOUNDTHRESHOLD|WOUNDS|WT)$/),
+    strainThreshold: stat(["StrainThreshold", "StrainThresholdTotal", "Strain"], /^(STRAINTHRESHOLD|STRAIN|ST)$/),
+    defenseRanged: stat(["DefenseRanged", "RangedDefense", "DefRanged"], /^(DEFENSERANGED|RANGEDDEFENSE|DEFRANGED)$/),
+    defenseMelee: stat(["DefenseMelee", "MeleeDefense", "DefMelee"], /^(DEFENSEMELEE|MELEEDEFENSE|DEFMELEE)$/),
+  };
+  for (const [k, v] of Object.entries(derived))
+    if (v !== undefined) (c as Record<string, unknown>)[k] = Math.max(0, Math.min(99, Math.round(v)));
+  const estimated: string[] = [];
+  if (derived.soak === undefined) {
+    c.soak = c.characteristics.brawn; // soak is at least Brawn
+    estimated.push("soak (Brawn only, armor not counted)");
   }
-  if (derived.soak === undefined) c.soak = c.characteristics.brawn; // soak is at least Brawn
-  if (missing.length)
+  const base = speciesBase[keyNorm(c.species ?? "")] ?? speciesBase[keyNorm(text(all(doc, "SpeciesKey")[0]))];
+  if (derived.woundThreshold === undefined && base) {
+    c.woundThreshold = Math.min(99, base.wounds + c.characteristics.brawn);
+    estimated.push("wound threshold (species + Brawn)");
+  }
+  if (derived.strainThreshold === undefined && base) {
+    c.strainThreshold = Math.min(99, base.strain + c.characteristics.willpower);
+    estimated.push("strain threshold (species + Willpower)");
+  }
+  if (estimated.length)
     warnings.push(
-      "Soak, wound/strain thresholds and defense are not always stored in the file; fill in any that are zero.",
+      `This file does not store ${estimated.join(", ")}; these were worked out from the species and characteristics, so talents such as Toughened or Grit are not included. Check them below.`,
     );
+  const stillZero = [
+    derived.woundThreshold === undefined && !base ? "wound threshold" : "",
+    derived.strainThreshold === undefined && !base ? "strain threshold" : "",
+    derived.defenseRanged === undefined && derived.defenseMelee === undefined ? "defense" : "",
+  ].filter(Boolean);
+  if (stillZero.length)
+    warnings.push(`Not found in this file, so please fill in: ${stillZero.join(", ")}.`);
 
   return { character: characterSchema.parse(c), warnings };
 }

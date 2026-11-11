@@ -30,6 +30,8 @@ export type Member = {
   role: "gm" | "player";
   portrait?: string;
   art: string[];
+  /** Personal notes: only ever sent to their owner. */
+  notes?: string;
   trees?: TreeProgress;
   character?: Character;
 };
@@ -67,6 +69,8 @@ export type Sheet = {
 export type TokenAppearanceStyle = {
   background: string;
   textColor: string;
+  /** Color of the name written under the token. */
+  nameColor?: string;
   outlineColor: string;
   outlineWidth: number;
   shape: "circle" | "square";

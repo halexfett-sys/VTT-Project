@@ -23,6 +23,7 @@ const sheet = z.object({
 const appearance = z.object({
   background: color,
   textColor: color,
+  nameColor: color.optional(),
   outlineColor: color,
   outlineWidth: num.min(0).max(12),
   shape: z.enum(["circle", "square"]),
@@ -297,6 +298,7 @@ export function act(
           portrait: key.optional(),
           art: z.array(key).max(30).optional(),
           character: characterSchema.nullable().optional(),
+          notes: z.string().max(10000).optional(),
         })
         .parse(input);
       if (p.portrait) asset(p.portrait);

@@ -9,6 +9,7 @@ import type {
   Token,
   Member,
   Sheet,
+  TokenAppearanceStyle,
   Asset,
   Grid,
   Symbols,
@@ -22,6 +23,7 @@ import CharacterTab from "./CharacterTab";
 import InitiativePopout, { SlotFace } from "./InitiativePopout";
 import NumberField from "./NumberField";
 import SliderField from "./SliderField";
+import NotesPanel from "./NotesPanel";
 import TokenDraftModal, { type TokenDraftStart } from "./TokenDraft";
 import { characterTokenStats } from "../shared/character";
 const diceNames: Die[] = [
@@ -121,6 +123,12 @@ export default function App() {
   const [manageScenes, setManageScenes] = useState(false);
   const [newSize, setNewSize] = useState(1);
   const [tokenDraft, setTokenDraft] = useState<TokenDraftStart | null>(null);
+  const [tokenLook, setTokenLook] = useState<{
+    assetId: string | null;
+    backAssetId: string | null;
+    appearance?: TokenAppearanceStyle;
+  } | null>(null);
+  const [rangeColor, setRangeColor] = useState("#f2be74");
   const [placing, setPlacing] = useState(false);
   const [libraryOwner, setLibraryOwner] = useState("");
   const [poolLabel, setPoolLabel] = useState("");
@@ -1087,6 +1095,21 @@ export default function App() {
                 : tool.toUpperCase()}
           </span>
           {tool === "range" && <div className="range-base"><SliderField live label="Range band radius" unit=" px" min={8} max={1000} step={4} value={rangeBase} onCommit={setRangeBase} /></div>}
+          {tool === "range" && (
+            <div className="range-colors" role="group" aria-label="Range band color">
+              {["#f2be74", "#ff5a5f", "#65d4c1", "#ffffff", "#7aa2ff", "#d38cff", "#000000"].map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  className={`swatch ${rangeColor.toLowerCase() === c ? "active" : ""}`}
+                  style={{ background: c }}
+                  aria-label={`Range band color ${c}`}
+                  onClick={() => setRangeColor(c)}
+                />
+              ))}
+              <input type="color" aria-label="Custom range band color" value={rangeColor} onChange={(e) => setRangeColor(e.target.value)} />
+            </div>
+          )}
           {token && gm && (
             <button
               className="inspect"
@@ -1109,11 +1132,13 @@ export default function App() {
           tool={tool}
           brush={brush}
           rangeBase={rangeBase}
+          rangeColor={rangeColor}
           selected={selected}
           onSelect={setSelected}
           send={send}
           onMenu={(id, x, y) => setMenu({ id, x, y })}
         />
+        <NotesPanel value={me.notes ?? ""} send={send} />
       </main>
       <aside className="right-panel">
         <section className="destiny">
@@ -1602,12 +1627,15 @@ export default function App() {
                     ?.color || "#6dd5dd"
                 }
                 send={send}
+                draft={{ onChange: setTokenLook }}
               />
             )}
             {editable ? (
               <TokenForm
                 key={token.id}
                 token={token}
+                look={tokenLook}
+                onCancel={() => setSheetOpen(false)}
                 gm={gm}
                 members={state.members}
                 character={state.members.find((m) => m.userId === token.ownerId)?.character}
@@ -1887,9 +1915,13 @@ function TokenForm({
   gm,
   members,
   character,
+  look,
+  onCancel,
   save,
 }: {
   token: Token;
+  look: { assetId: string | null; backAssetId: string | null; appearance?: TokenAppearanceStyle } | null;
+  onCancel: () => void;
   gm: boolean;
   members: Campaign["members"];
   character?: Member["character"];
@@ -1921,6 +1953,14 @@ function TokenForm({
           rotation: Number(f.get("rotation")),
           status: f.get("status"),
           sheet,
+          // Picture and look are saved together with the details, so one Save covers everything.
+          ...(look
+            ? {
+                assetId: look.assetId,
+                backAssetId: look.backAssetId,
+                ...(look.appearance ? { appearance: look.appearance } : {}),
+              }
+            : {}),
           ...(gm
             ? { hidden: f.get("hidden") === "on", ownerId: f.get("ownerId") }
             : {}),
@@ -2011,7 +2051,12 @@ function TokenForm({
           defaultValue={t.sheet.notes}
         />
       </Field>
-      <button className="primary full">Save token</button>
+      <div className="modal-savebar">
+        <button type="button" onClick={onCancel}>
+          Cancel
+        </button>
+        <button className="primary">Save token</button>
+      </div>
     </form>
   );
 }

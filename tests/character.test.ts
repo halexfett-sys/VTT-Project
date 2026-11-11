@@ -32,7 +32,7 @@ const xml=`<?xml version="1.0" encoding="utf-8"?>
 
 test('OggDude XML import reads identity, characteristics and skills',()=>{
  const {character:c,warnings}=importOggDude(xml);
- assert.equal(c.name,'Jax & Co');assert.equal(c.species,'Twilek');assert.equal(c.career,'Bountyhunter');
+ assert.equal(c.name,'Jax & Co');assert.equal(c.species,"Twi'lek");assert.equal(c.career,'Bounty Hunter');
  assert.deepEqual(c.specializations,['Assassin']);assert.equal(c.credits,750);
  assert.deepEqual(c.characteristics,{brawn:3,agility:3,intellect:2,cunning:2,willpower:2,presence:1});
  const sk=(k:string)=>c.skills.find(s=>s.key===k)!;
@@ -86,4 +86,33 @@ test('OggDude ranks: NonCareerRanks is not added again, and Streetwise (SW) and 
  // a sheet saved before Streetwise was known gets the right characteristic back
  const old={...c,skills:[{key:'SW',name:'Sw',characteristic:'intellect' as const,rank:3,career:true}]};
  assert.equal(withAllSkills(old).find(s=>s.key==='SW')!.characteristic,'cunning');
+});
+
+test('import finds species and career wherever they sit, and reads thresholds/soak/defense in several layouts',()=>{
+ const nested=`<Character><Description><CharName>Kira</CharName><Species><SpeciesKey>WOOKIEE</SpeciesKey></Species></Description>
+  <Career><CareerKey>HIREDGUN</CareerKey><CareerSkills><Key>ATHL</Key></CareerSkills></Career>
+  <Characteristics><CharCharacteristic><Key>BR</Key><Rank><StartingRanks>3</StartingRanks></Rank></CharCharacteristic></Characteristics>
+  <Attributes><WoundThreshold>17</WoundThreshold><StrainThreshold>10</StrainThreshold><Soak>5</Soak><DefenseRanged>1</DefenseRanged><DefenseMelee>2</DefenseMelee></Attributes></Character>`;
+ const a=importOggDude(nested).character;
+ assert.equal(a.species,'Wookiee');assert.equal(a.career,'Hired Gun');
+ assert.deepEqual([a.woundThreshold,a.strainThreshold,a.soak,a.defenseRanged,a.defenseMelee],[17,10,5,1,2]);
+ const keyed=`<Character><Species>HUMAN</Species><Career><CareerName>Smuggler</CareerName></Career>
+  <Derived><CharAttribute><Key>SOAK</Key><Total>4</Total></CharAttribute>
+  <CharAttribute><Key>WT</Key><Rank><StartingRanks>10</StartingRanks><PurchasedRanks>2</PurchasedRanks></Rank></CharAttribute>
+  <Wounds><Current>3</Current><Max>15</Max></Wounds></Derived></Character>`;
+ const b=importOggDude(keyed).character;
+ assert.equal(b.species,'Human');assert.equal(b.career,'Smuggler');assert.equal(b.soak,4);assert.equal(b.woundThreshold,15);
+});
+test('when a file has no thresholds they are worked out from species and characteristics, with a warning',()=>{
+ const {character:c,warnings}=importOggDude(xml); // Twi'lek, Brawn 3, Willpower 2
+ assert.equal(c.woundThreshold,13);assert.equal(c.strainThreshold,13);
+ assert.ok(warnings.some(w=>/worked out from the species/.test(w)));
+});
+test('Riding is not a skill: not in the list, not imported, hidden on older sheets',()=>{
+ assert.equal(findSkill('RIDE'),undefined);
+ assert.ok(!withAllSkills(emptyCharacter()).some(s=>/riding/i.test(s.name)));
+ const {character:c}=importOggDude('<Character><Skills><CharSkill><Key>RIDE</Key><Rank><PurchasedRanks>2</PurchasedRanks></Rank></CharSkill><CharSkill><Key>ATHL</Key><Rank><PurchasedRanks>1</PurchasedRanks></Rank></CharSkill></Skills></Character>');
+ assert.ok(!c.skills.some(s=>s.key==='RIDE'));
+ const old=emptyCharacter();old.skills=[{key:'RIDE',name:'Riding',characteristic:'agility',rank:2,career:false}];
+ assert.ok(!withAllSkills(old).some(s=>s.key==='RIDE'));
 });
