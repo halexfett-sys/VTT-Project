@@ -1979,20 +1979,23 @@ h1,h2,h3,.brand {font-family:Starjhol,SWEuro,sans-serif;letter-spacing:.04em;}
 .crew-faces > span img, .crew-popover .crew-row > span img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .crew-faces > span { width: 30px; height: 30px; }
 
-/* Skill cards: characteristic code, skill name, then the dice. A gold diamond marks career skills. */
-.skill-row { margin-bottom: 12px; }
+/* Skill cards: wide, sleek rectangles. Characteristic code, skill name, then the dice; a gold diamond marks career skills. */
+.skill-group { display: grid; grid-template-columns: repeat(auto-fill, minmax(215px, 1fr)); gap: 10px; margin-bottom: 14px; }
+.skill-group > h4 { grid-column: 1 / -1; margin: 10px 0 0; }
+.skill-row { display: block; margin: 0; min-width: 0; }
 .skill-pick {
-  position: relative; display: flex; flex-direction: column; align-items: flex-start; justify-content: flex-start;
-  gap: 0; width: 100%; min-height: 0; padding: 10px 22px 16px;
-  background: #1a1d26; border: 2px solid #e9ecef; border-radius: 26px; overflow: hidden;
+  position: relative; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 0;
+  width: 100%; min-height: 0; padding: 7px 14px 8px;
+  background: #1a1d26; border: 1.5px solid #dfe3e8; border-radius: 18px; overflow: hidden; text-align: left;
 }
 .skill-pick:hover { background: #222633; border-color: #fff; }
-.skill-abbr { font-family: SWEuro, sans-serif; font-size: 20px; font-weight: 700; letter-spacing: .5px; line-height: 1.1; color: #d3d6db; }
+.skill-abbr { font-family: SWEuro, sans-serif; font-size: 10.5px; font-weight: 700; letter-spacing: .6px; line-height: 1.1; color: #c9cdd3; }
 .skill-pick .skill-name {
-  flex: none; width: 100%; font-family: SWEuro, sans-serif; font-size: 30px; font-weight: 700; line-height: 1.1;
-  color: #fff; overflow-wrap: anywhere; margin-top: 2px;
+  display: block; flex: none; width: 100%; margin: 0; font-family: SWEuro, sans-serif; font-size: 16px; font-weight: 700;
+  line-height: 1.15; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.skill-pick .skill-dice { flex: none; max-width: 100%; justify-content: flex-start; gap: 10px; margin-top: 12px; min-height: 40px; }
-.skill-pick .skill-dice img { width: 36px; height: 36px; }
-.skill-pick .career-mark { position: absolute; top: 12px; right: 18px; display: block; line-height: 0; filter: drop-shadow(0 0 4px #e8b92388); }
-.skill-row.active .skill-pick { background: #17333a; border-color: var(--teal); box-shadow: 0 0 0 2px var(--teal) inset; }
+.skill-pick .skill-dice { display: flex; flex-wrap: wrap; justify-content: flex-start; gap: 3px; max-width: 100%; max-height: none; margin-top: 4px; min-height: 20px; }
+.skill-pick .skill-dice img { width: 20px; height: 20px; }
+.skill-pick .career-mark { position: absolute; top: 8px; right: 12px; display: block; line-height: 0; filter: drop-shadow(0 0 3px #e8b92388); }
+.skill-pick .career-mark svg { width: 13px; height: 18px; }
+.skill-row.active .skill-pick { background: #17333a; border-color: var(--teal); box-shadow: 0 0 0 1.5px var(--teal) inset; }

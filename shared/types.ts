@@ -33,6 +33,8 @@ export type Member = {
   /** Personal notes: only ever sent to their owner. */
   notes?: string;
   trees?: TreeProgress;
+  /** Tree ids that were added automatically from the character sheet, so removing the sheet can take them out again. */
+  importedTrees?: string[];
   character?: Character;
 };
 export type Grid = {

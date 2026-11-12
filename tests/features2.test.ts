@@ -171,3 +171,27 @@ test("saving a character adds its career and specialization trees and ticks boug
  act(c,player,"profile:update",{character:{...ch,treeProgress:[{spec:"Charmer",nodes:[0,1,6,7]}]}});
  assert.deepEqual(t().find(x=>x.treeId==="eoe-charmer")!.completed,[0,1,6,7]);
 });
+
+test("removing the character sheet removes the trees it added, and keeps trees the player added themselves",()=>{
+ const {c,player}=tokenFixture();
+ const mem=()=>c.members.find(m=>m.userId===player)!;
+ act(c,player,"profile:tree",{treeId:"eoe-pilot",operation:"add"}); // the player's own choice
+ const ch=characterSchema.parse({...emptyCharacter(),name:"Nikita",career:"Smuggler",specializations:["Charmer","Interrogator"],treeProgress:[{spec:"Charmer",nodes:[0,1]}]});
+ act(c,player,"profile:update",{character:ch});
+ assert.deepEqual(mem().trees!.map(t=>t.treeId).sort(),["aor-interrogator","eoe-charmer","eoe-pilot","eoe-smuggler-career"]);
+ act(c,player,"profile:update",{character:null});
+ assert.equal(mem().character,undefined);
+ assert.deepEqual(mem().trees!.map(t=>t.treeId),["eoe-pilot"]);
+ assert.equal(mem().importedTrees,undefined);
+ // importing another sheet afterwards starts clean
+ act(c,player,"profile:update",{character:characterSchema.parse({...emptyCharacter(),career:"Smuggler",specializations:["Thief"]})});
+ assert.deepEqual(mem().trees!.map(t=>t.treeId).sort(),["eoe-pilot","eoe-smuggler-career","eoe-thief"]);
+});
+test("a sheet saved before trees were tracked still loses its trees when removed",()=>{
+ const {c,player}=tokenFixture();
+ const mem=()=>c.members.find(m=>m.userId===player)!;
+ mem().character=characterSchema.parse({...emptyCharacter(),career:"Smuggler",specializations:["Charmer"]});
+ mem().trees=[{treeId:"eoe-charmer",completed:[0]},{treeId:"eoe-scout",completed:[]}];
+ act(c,player,"profile:update",{character:null});
+ assert.deepEqual(mem().trees!.map(t=>t.treeId),["eoe-scout"]);
+});

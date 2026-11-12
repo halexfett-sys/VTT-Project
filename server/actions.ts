@@ -52,9 +52,20 @@ export function applyCharacterToTrees(m: Member) {
   const list = (m.trees ??= []);
   for (const seed of treesForCharacter(m.character)) {
     let entry = list.find((t) => t.treeId === seed.treeId);
-    if (!entry) list.push((entry = { treeId: seed.treeId, completed: [] }));
+    if (!entry) {
+      list.push((entry = { treeId: seed.treeId, completed: [] }));
+      // Remember which trees the sheet added, so removing the sheet can take exactly those out.
+      m.importedTrees = [...new Set([...(m.importedTrees ?? []), seed.treeId])];
+    }
     entry.completed = [...new Set([...entry.completed, ...seed.completed])].sort((a, b) => a - b);
   }
+}
+/** The player removed their character sheet: take out the trees it added. Trees they added themselves stay.
+ *  Sheets saved before this was tracked have no list, so those use the trees the old sheet implies. */
+export function removeCharacterTrees(m: Member, old: Member["character"]) {
+  const gone = new Set(m.importedTrees ?? (old ? treesForCharacter(old).map((t) => t.treeId) : []));
+  if (m.trees) m.trees = m.trees.filter((t) => !gone.has(t.treeId));
+  delete m.importedTrees;
 }
 /** Remove a member and hand any tokens they controlled to the first GM so nothing is orphaned. */
 export function removeMember(c: Campaign, userId: string) {
@@ -316,7 +327,11 @@ export function act(
       p.art?.forEach(asset);
       const { character, ...rest } = p;
       Object.assign(m, rest);
-      if (character === null) delete m.character; // player removed their character sheet
+      if (character === null) {
+        // player removed their character sheet, and with it the trees it added
+        removeCharacterTrees(m, m.character);
+        delete m.character;
+      }
       else if (character) {
         // Only re-fill the tree list when the sheet's career, specializations or bought talents changed, so a tree
         // the player removed on purpose does not come back every time they save the sheet.
