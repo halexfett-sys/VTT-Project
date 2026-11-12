@@ -105,6 +105,8 @@ export const characterSchema = z.object({
   species: z.string().trim().max(80).optional(),
   career: z.string().trim().max(80).optional(),
   specializations: z.array(z.string().trim().max(80)).max(20),
+  /** Talents already bought in each specialization, as tree positions (row x 4 + column). */
+  treeProgress: z.array(z.object({ spec: z.string().trim().max(80), nodes: z.array(z.number().int().min(0).max(19)).max(20) })).max(20).optional(),
   credits: z.number().int().min(0).max(1e12),
   characteristics: z.object({
     brawn: rank,

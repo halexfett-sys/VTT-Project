@@ -153,3 +153,21 @@ test("whole-image fit never clips a picture inside a round token",async()=>{
  const fit=1/200*f, w=100*fit, h=200*fit;
  assert.ok(Math.hypot(w,h)<=1+1e-9);
 });
+
+test("saving a character adds its career and specialization trees and ticks bought talents, without undoing later changes",()=>{
+ const {c,player}=tokenFixture();
+ const ch=characterSchema.parse({...emptyCharacter(),name:"Nikita",career:"Smuggler",specializations:["Charmer","Interrogator","Nonexistent"],treeProgress:[{spec:"Charmer",nodes:[0,1,6]}]});
+ act(c,player,"profile:update",{character:ch});
+ const t=()=>c.members.find(m=>m.userId===player)!.trees!;
+ assert.deepEqual(t().map(x=>x.treeId).sort(),["aor-interrogator","eoe-charmer","eoe-smuggler-career"]);
+ assert.deepEqual(t().find(x=>x.treeId==="eoe-charmer")!.completed,[0,1,6]);
+ // player unticks a talent and removes a tree, then saves the same sheet again: nothing comes back
+ act(c,player,"profile:tree",{treeId:"eoe-charmer",operation:"mark",node:1,completed:false});
+ act(c,player,"profile:tree",{treeId:"aor-interrogator",operation:"remove"});
+ act(c,player,"profile:update",{character:{...ch,name:"Nikita M"}});
+ assert.deepEqual(t().find(x=>x.treeId==="eoe-charmer")!.completed,[0,6]);
+ assert.ok(!t().some(x=>x.treeId==="aor-interrogator"));
+ // a new bought talent in the sheet is added on top of existing progress
+ act(c,player,"profile:update",{character:{...ch,treeProgress:[{spec:"Charmer",nodes:[0,1,6,7]}]}});
+ assert.deepEqual(t().find(x=>x.treeId==="eoe-charmer")!.completed,[0,1,6,7]);
+});

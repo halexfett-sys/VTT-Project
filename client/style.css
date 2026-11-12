@@ -1978,3 +1978,21 @@ h1,h2,h3,.brand {font-family:Starjhol,SWEuro,sans-serif;letter-spacing:.04em;}
 .crew-faces > span, .crew-popover .crew-row > span { overflow: hidden; }
 .crew-faces > span img, .crew-popover .crew-row > span img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .crew-faces > span { width: 30px; height: 30px; }
+
+/* Skill cards: characteristic code, skill name, then the dice. A gold diamond marks career skills. */
+.skill-row { margin-bottom: 12px; }
+.skill-pick {
+  position: relative; display: flex; flex-direction: column; align-items: flex-start; justify-content: flex-start;
+  gap: 0; width: 100%; min-height: 0; padding: 10px 22px 16px;
+  background: #1a1d26; border: 2px solid #e9ecef; border-radius: 26px; overflow: hidden;
+}
+.skill-pick:hover { background: #222633; border-color: #fff; }
+.skill-abbr { font-family: SWEuro, sans-serif; font-size: 20px; font-weight: 700; letter-spacing: .5px; line-height: 1.1; color: #d3d6db; }
+.skill-pick .skill-name {
+  flex: none; width: 100%; font-family: SWEuro, sans-serif; font-size: 30px; font-weight: 700; line-height: 1.1;
+  color: #fff; overflow-wrap: anywhere; margin-top: 2px;
+}
+.skill-pick .skill-dice { flex: none; max-width: 100%; justify-content: flex-start; gap: 10px; margin-top: 12px; min-height: 40px; }
+.skill-pick .skill-dice img { width: 36px; height: 36px; }
+.skill-pick .career-mark { position: absolute; top: 12px; right: 18px; display: block; line-height: 0; filter: drop-shadow(0 0 4px #e8b92388); }
+.skill-row.active .skill-pick { background: #17333a; border-color: var(--teal); box-shadow: 0 0 0 2px var(--teal) inset; }

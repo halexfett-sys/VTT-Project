@@ -1,5 +1,5 @@
 import { characterSchema, characterTokenStats } from "../shared/character.js";
-import { trees } from "../shared/trees.js";
+import { trees, treesForCharacter } from "../shared/trees.js";
 import { randomInt } from "node:crypto";
 import { z } from "zod";
 import { rollPool } from "../shared/dice.js";
@@ -44,6 +44,17 @@ export function applyCharacterToTokens(c: Campaign, m: Member) {
   const named = nm ? mine.filter((t) => t.name.trim().toLowerCase() === nm) : [];
   const targets = named.length ? named : mine.length === 1 ? mine : [];
   for (const t of targets) t.sheet = { ...t.sheet, ...characterTokenStats(m.character) };
+}
+/** Add the trees a character sheet implies (career and specializations) to the member's tree list and tick the talents the sheet
+ *  says are already bought. Existing progress is only ever added to, never cleared. */
+export function applyCharacterToTrees(m: Member) {
+  if (!m.character) return;
+  const list = (m.trees ??= []);
+  for (const seed of treesForCharacter(m.character)) {
+    let entry = list.find((t) => t.treeId === seed.treeId);
+    if (!entry) list.push((entry = { treeId: seed.treeId, completed: [] }));
+    entry.completed = [...new Set([...entry.completed, ...seed.completed])].sort((a, b) => a - b);
+  }
 }
 /** Remove a member and hand any tokens they controlled to the first GM so nothing is orphaned. */
 export function removeMember(c: Campaign, userId: string) {
@@ -307,8 +318,13 @@ export function act(
       Object.assign(m, rest);
       if (character === null) delete m.character; // player removed their character sheet
       else if (character) {
+        // Only re-fill the tree list when the sheet's career, specializations or bought talents changed, so a tree
+        // the player removed on purpose does not come back every time they save the sheet.
+        const sig = (ch?: Member["character"]) => JSON.stringify([ch?.career, ch?.specializations, ch?.treeProgress]);
+        const changed = sig(m.character) !== sig(character) || !m.trees?.length;
         m.character = character;
         applyCharacterToTokens(c, m);
+        if (changed) applyCharacterToTrees(m);
       }
       break;
     }

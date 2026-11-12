@@ -280,11 +280,17 @@ export default function CharacterTab({
                     onClick={() => choose(s)}
                     title={`Add ${s.name} to the dice pool`}
                   >
-                    <span className="skill-name">
-                      {s.career && <b title="Career skill" aria-label="Career skill">◆</b>} {s.name}
-                      <small> {abbr(s.characteristic)}</small>
-                    </span>
+                    <span className="skill-abbr">{abbr(s.characteristic)}</span>
+                    <span className="skill-name">{s.name}</span>
                     <Dice {...d} />
+                    {s.career && (
+                      <span className="career-mark" role="img" title="Career skill" aria-label="Career skill">
+                        <svg viewBox="0 0 24 34" width="22" height="31" aria-hidden="true">
+                          <path d="M12 1 L23 17 L12 33 L1 17 Z" fill="#0a0a0a" />
+                          <path d="M12 7 L18 17 L12 27 L6 17 Z" fill="#e8b923" />
+                        </svg>
+                      </span>
+                    )}
                   </button>
                 </div>
               );

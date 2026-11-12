@@ -243,3 +243,27 @@ export function talentPosition(tree:Pick<TreeMeta,'kind'|'game'>,index:number){
  const n=index%9,base=index<9?0:952;
  return {x:xs[n===0?0:(n-1)%4]/1675*100,y:(base+(n===0?454:n<=4?729:1003))/2175*100};
 }
+
+const treeNorm=(s:string)=>s.toLowerCase().replace(/[^a-z0-9]/g,'');
+/** The tree image for a specialization name. Names shared by several games resolve to the character's own career, or to none. */
+export function findSpecializationTree(name:string,career?:string):TreeMeta|undefined{
+ const same=trees.filter(t=>t.kind==='specialization'&&treeNorm(t.name)===treeNorm(name));
+ if(same.length<=1)return same[0];
+ return same.find(t=>career&&treeNorm(t.career)===treeNorm(career));
+}
+export function findCareerTree(career?:string):TreeMeta|undefined{
+ return career?trees.find(t=>t.kind==='career'&&treeNorm(t.career)===treeNorm(career)):undefined;
+}
+/** The trees a character sheet implies: its career tree and one per specialization, with the talents already bought ticked. */
+export function treesForCharacter(c:{career?:string;specializations:string[];treeProgress?:{spec:string;nodes:number[]}[]}){
+ const out=new Map<string,{treeId:string;completed:number[]}>();
+ const career=findCareerTree(c.career);
+ if(career)out.set(career.id,{treeId:career.id,completed:[]});
+ for(const name of c.specializations){
+  const t=findSpecializationTree(name,c.career);
+  if(!t)continue;
+  const nodes=(c.treeProgress??[]).filter(p=>treeNorm(p.spec)===treeNorm(name)).flatMap(p=>p.nodes).filter(n=>n>=0&&n<t.nodes);
+  out.set(t.id,{treeId:t.id,completed:[...new Set([...(out.get(t.id)?.completed??[]),...nodes])].sort((a,b)=>a-b)});
+ }
+ return [...out.values()];
+}

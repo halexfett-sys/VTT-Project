@@ -140,3 +140,15 @@ test('an unrecognised species or career code is kept as written and flagged',()=
  assert.equal(c.species,'XYZ');assert.equal(c.career,'QQ');
  assert.equal(warnings.filter(w=>/stored as the code/.test(w)).length,2);
 });
+
+test('import reads the talents bought in each specialization as tree positions, and warns when a spec has no tree',()=>{
+ const x=`<Character><Career><CareerKey>SMUG</CareerKey></Career><Specializations>
+ <CharSpecialization><Key>CHARMER</Key><Name>Charmer</Name><isStartingSpec>true</isStartingSpec><Talents>
+  <CharTalent><Key>A</Key><Col>0</Col><Row>0</Row><Purchased>true</Purchased></CharTalent>
+  <CharTalent><Key>B</Key><Col>2</Col><Row>1</Row><Purchased>true</Purchased></CharTalent>
+  <CharTalent><Key>C</Key><Col>3</Col><Row>4</Row><Purchased>false</Purchased></CharTalent></Talents></CharSpecialization>
+ <CharSpecialization><Key>MADEUP</Key><Name>Madeup Spec</Name><Talents/></CharSpecialization></Specializations></Character>`;
+ const {character:c,warnings}=importOggDude(x);
+ assert.deepEqual(c.treeProgress,[{spec:'Charmer',nodes:[0,6]}]);
+ assert.ok(warnings.some(w=>/Madeup Spec/.test(w)));
+});

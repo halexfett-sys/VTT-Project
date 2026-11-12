@@ -1,3 +1,4 @@
+import { findSpecializationTree } from "./trees.js";
 import {
   charCodes,
   characterSchema,
@@ -161,6 +162,20 @@ export function importOggDude(xml: string): ImportResult {
       }
   }
   c.specializations = [...specs].filter(Boolean).slice(0, 20);
+  // Each bought talent has a Row and Col in its specialization tree (4 columns), which is where it is ticked in the tree browser.
+  const progress = listed
+    .map((sp) => ({
+      spec: displayWord(specName(sp)),
+      nodes: all(sp, "CharTalent")
+        .filter((t) => text(first(t, "Purchased")).toLowerCase() === "true")
+        .map((t) => (num(text(first(t, "Row"))) ?? -1) * 4 + (num(text(first(t, "Col"))) ?? -1))
+        .filter((n) => Number.isInteger(n) && n >= 0 && n < 20),
+    }))
+    .filter((p) => p.spec && p.nodes.length);
+  if (progress.length) c.treeProgress = progress.slice(0, 20);
+  for (const name of c.specializations)
+    if (!findSpecializationTree(name, c.career))
+      warnings.push(`There is no tree image for the specialization "${name}"; add it from Browse trees if you have one.`);
 
   const credits = firstNum(doc, "Credits");
   if (credits !== undefined) c.credits = Math.max(0, Math.round(credits));
