@@ -141,3 +141,51 @@ export function viewFor(c: Campaign, userId: string): Campaign {
     pings: (c.pings ?? []).filter((p) => p.mapId === c.activeMapId),
   };
 }
+
+/**
+ * Tokens belong to the whole table and always follow the active scene.
+ * Older tables kept a separate copy of "the same" token on every scene; this folds those copies back into one.
+ * A token counts as the same when owner, name and image match. The table keeps as many of it as its fullest scene
+ * had, taking them from the `prefer` scene first (the scene the table is coming from, so tokens already on the table
+ * stay exactly as they are) and dropping the extra copies. Several identical tokens inside one scene
+ * (a squad of troopers) are deliberate and are left alone.
+ * Every kept token ends up on the active scene. With `clampAll`, any token that would sit off the edge of that scene
+ * is pulled back onto it; everything else keeps its exact position.
+ */
+export function reconcileTokens(
+  c: Campaign,
+  opts: { prefer?: string; clampAll?: boolean } = {},
+) {
+  const active = c.maps.find((m) => m.id === c.activeMapId);
+  if (!active) return;
+  const prefer = opts.prefer ?? active.id;
+  const keyOf = (t: Token) => `${t.ownerId}|${t.name.trim().toLowerCase()}|${t.assetId ?? ""}`;
+  const groups = new Map<string, Map<string, Token[]>>();
+  for (const t of c.tokens) {
+    const scenes = groups.get(keyOf(t)) ?? new Map<string, Token[]>();
+    scenes.set(t.mapId, [...(scenes.get(t.mapId) ?? []), t]);
+    groups.set(keyOf(t), scenes);
+  }
+  const keep = new Set<string>();
+  for (const scenes of groups.values()) {
+    const lists = [...scenes.entries()].sort(
+      ([a, la], [b, lb]) => Number(b === prefer) - Number(a === prefer) || lb.length - la.length,
+    );
+    const need = Math.max(...lists.map(([, l]) => l.length));
+    for (const t of lists.flatMap(([, l]) => l).slice(0, need)) keep.add(t.id);
+  }
+  const dropped = new Set(c.tokens.filter((t) => !keep.has(t.id)).map((t) => t.id));
+  if (dropped.size) {
+    c.tokens = c.tokens.filter((t) => keep.has(t.id));
+    for (const slot of c.initiative.slots)
+      if (slot.tokenId && dropped.has(slot.tokenId)) delete slot.tokenId;
+  }
+  for (const t of c.tokens) {
+    const wasElsewhere = t.mapId !== active.id;
+    t.mapId = active.id;
+    if (opts.clampAll || wasElsewhere) {
+      t.x = Math.max(0, Math.min(active.width, t.x));
+      t.y = Math.max(0, Math.min(active.height, t.y));
+    }
+  }
+}

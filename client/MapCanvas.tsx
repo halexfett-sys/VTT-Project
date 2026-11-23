@@ -387,8 +387,6 @@ export default function MapCanvas({
           if (!(s.pings ?? []).some((p) => p.id === id)) pingSeen.current.delete(id);
       const ruler = measure.current;
       if (ruler) {
-        const dist =
-          Math.hypot(ruler.b.x - ruler.a.x, ruler.b.y - ruler.a.y) / g.size;
         ctx.strokeStyle = "#f2be74";
         ctx.fillStyle = "#f2be74";
         ctx.lineWidth = 2 / cam.zoom;
@@ -398,13 +396,6 @@ export default function MapCanvas({
         ctx.lineTo(ruler.b.x, ruler.b.y);
         ctx.stroke();
         ctx.setLineDash([]);
-        ctx.font = `${15 / cam.zoom}px SWEuro, sans-serif`;
-        ctx.textAlign = "left";
-        ctx.fillText(
-          `${dist.toFixed(1)} grid units`,
-          ruler.b.x + 12 / cam.zoom,
-          ruler.b.y - 12 / cam.zoom,
-        );
         if (current.current.tool === "range")
           drawRings(ruler.a.x, ruler.a.y, current.current.rangeBase, current.current.rangeColor || "#f2be74", cam.zoom);
       }

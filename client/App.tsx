@@ -1457,19 +1457,6 @@ export default function App() {
         ) : (
           <>
             <div className="chat-log">
-              {gm && (
-                <button
-                  type="button"
-                  className="clear-log"
-                  onClick={() => {
-                    const rolls = tab === "rolls";
-                    if (window.confirm(rolls ? "Clear the roll log for everyone?" : "Clear the chat for everyone? Dice rolls stay in the roll log."))
-                      send("chat:clear", { scope: rolls ? "rolls" : "chat" });
-                  }}
-                >
-                  {tab === "rolls" ? "Clear roll log" : "Clear chat"}
-                </button>
-              )}
               <div className="system-note">
                 <span>◈</span>
                 <strong>Uplink established</strong>
@@ -1611,6 +1598,28 @@ export default function App() {
                 </button>
               </div>
               <small>Enter to transmit</small>
+              {gm && (
+                <div className="clear-row">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (window.confirm("Clear the chat for everyone? Dice rolls stay in the roll log."))
+                        send("chat:clear", { scope: "chat" });
+                    }}
+                  >
+                    Clear chat
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (window.confirm("Clear the roll log for everyone?"))
+                        send("chat:clear", { scope: "rolls" });
+                    }}
+                  >
+                    Clear rolls
+                  </button>
+                </div>
+              )}
             </form>
           </>
         )}

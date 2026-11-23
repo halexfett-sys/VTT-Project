@@ -1905,7 +1905,8 @@ h1,h2,h3,.brand {font-family:Starjhol,SWEuro,sans-serif;letter-spacing:.04em;}
 .init-move button { font-size: 8px; padding: 0 5px; height: 15px; line-height: 1; }
 .init-drop-end { margin: 0 6px 6px; padding: 8px; text-align: center; font-size: 11px; color: var(--gold); border: 1px dashed var(--gold); border-radius: 8px; }
 .d100-result { font-size: 34px; font-weight: 700; color: var(--gold); text-align: center; padding: 6px 0; }
-.clear-log { margin: 0 0 8px auto; display: block; font-size: 11px; padding: 4px 10px; }
+.clear-row { display: flex; gap: 8px; margin-top: 8px; }
+.clear-row button { flex: 1; font-size: 11px; padding: 5px 8px; }
 /* Character panel: each skill is one wide horizontal rectangle, name on the left and its dice on the right.
    The left panel itself is widened in the .tabletop:has(.character-panel) rule above. */
 .pool-picked { position: sticky; top: 0; z-index: 3; display: flex; align-items: center; flex-wrap: wrap; gap: 10px; padding: 10px 14px; font-size: 15px; background: #123238; border-width: 2px; box-shadow: 0 4px 10px #0008; }

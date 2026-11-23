@@ -4,7 +4,7 @@ import { randomInt } from "node:crypto";
 import { z } from "zod";
 import { rollPool } from "../shared/dice.js";
 import { defaultSheet, type Campaign, type Member, type Slot, type Token } from "../shared/types.js";
-import { canEdit, id, newMap } from "./state.js";
+import { canEdit, id, newMap, reconcileTokens } from "./state.js";
 const num = z.number().finite(),
   coord = num.min(0).max(20000),
   color = z.string().regex(/^#[0-9a-f]{6}$/i),
@@ -84,6 +84,8 @@ export function act(
 ) {
   const m = c.members.find((m) => m.userId === userId);
   if (!m) throw new Error("Join this campaign first");
+  // Fold any per-scene token copies from older tables back into one set of tokens.
+  if (c.tokens.some((t) => t.mapId !== c.activeMapId)) reconcileTokens(c);
   // Pings are short-lived; drop any that have faded so they never pile up in the saved table.
   if (c.pings?.length) c.pings = c.pings.filter((p) => Date.now() - p.time < PING_LIFETIME_MS);
   const gm = () => {
@@ -113,14 +115,19 @@ export function act(
         map.height = a.height;
       }
       c.maps.push(map);
+      const previous = c.activeMapId;
       c.activeMapId = map.id;
+      reconcileTokens(c, { prefer: previous, clampAll: true });
       break;
     }
     case "map:activate": {
       gm();
       const p = z.object({ id: key }).parse(input);
       if (!c.maps.some((m) => m.id === p.id)) throw new Error("Map not found");
+      const previous = c.activeMapId;
       c.activeMapId = p.id;
+      // Tokens go with the table: same look, same place, nothing duplicated, and nothing left off the edge of the new scene.
+      reconcileTokens(c, { prefer: previous, clampAll: true });
       break;
     }
     case "map:delete": {
@@ -137,8 +144,7 @@ export function act(
       c.maps = c.maps.filter((map) => !selected.has(map.id));
       if (!c.maps.length) c.maps.push(newMap());
       if (selected.has(c.activeMapId)) c.activeMapId = c.maps[0].id;
-      for (const token of c.tokens)
-        if (!c.maps.some((map) => map.id === token.mapId)) token.mapId = c.activeMapId;
+      reconcileTokens(c, { clampAll: true });
       c.bands = (c.bands ?? []).filter((b) => !selected.has(b.mapId));
       c.pings = (c.pings ?? []).filter((p) => !selected.has(p.mapId));
       break;

@@ -150,3 +150,55 @@ test("a token created after the sheet was imported gets the character's threshol
   act(c, player, "token:create", { name: "Companion" });
   assert.equal(c.tokens[1].sheet.woundThreshold, 12, "unrelated second token is left alone");
 });
+const legacyToken = (c: ReturnType<typeof fixture>["c"], ownerId: string, mapId: string, name: string, x: number, y: number) => {
+  act(c, ownerId, "token:create", { name });
+  const t = c.tokens.at(-1)!;
+  t.mapId = mapId;
+  t.x = x;
+  t.y = y;
+  return t;
+};
+test("switching scenes keeps tokens on the table exactly where they were", () => {
+  const { c, gm, player } = fixture();
+  const first = c.maps[0].id;
+  act(c, player, "token:create", { name: "Hero" });
+  act(c, player, "token:move", { id: c.tokens[0].id, x: 300, y: 200 });
+  act(c, gm, "map:create", { name: "Second" });
+  const second = c.activeMapId;
+  assert.notEqual(second, first);
+  assert.equal(c.tokens.length, 1);
+  assert.deepEqual([c.tokens[0].x, c.tokens[0].y, c.tokens[0].mapId], [320, 192, second]); // 320,192 is where the grid snapped it
+});
+test("a token that already exists in the destination scene is not duplicated, and the one on the table stays put", () => {
+  const { c, gm, player } = fixture();
+  const first = c.maps[0].id;
+  act(c, gm, "map:create", { name: "Second" });
+  const second = c.activeMapId;
+  act(c, gm, "map:activate", { id: first });
+  const onTable = legacyToken(c, player, first, "Hero", 400, 250);
+  legacyToken(c, player, second, "hero", 50, 60); // older per-scene copy of the same token
+  act(c, gm, "map:activate", { id: second });
+  const heroes = c.tokens.filter((t) => t.name.toLowerCase() === "hero");
+  assert.equal(heroes.length, 1);
+  assert.equal(heroes[0].id, onTable.id);
+  assert.deepEqual([heroes[0].x, heroes[0].y], [400, 250]);
+  assert.equal(viewFor(c, player).tokens.length, 1);
+});
+test("tokens that would land off a smaller scene are pulled back onto it, and legacy copies fold together", () => {
+  const { c, gm, player } = fixture();
+  const first = c.maps[0].id;
+  act(c, gm, "map:create", { name: "Small" });
+  const small = c.activeMapId;
+  Object.assign(c.maps.find((m) => m.id === small)!, { width: 500, height: 400 });
+  act(c, gm, "map:activate", { id: first });
+  legacyToken(c, player, first, "Far away", 1500, 900);
+  act(c, gm, "map:activate", { id: small });
+  const t = c.tokens.find((x) => x.name === "Far away")!;
+  assert.ok(t.x <= 500 && t.y <= 400);
+  // a squad of identical tokens inside one scene is kept whole
+  act(c, gm, "map:activate", { id: first });
+  for (let i = 0; i < 3; i++) legacyToken(c, gm, first, "Trooper", 100 + i * 10, 100);
+  act(c, gm, "map:activate", { id: small });
+  assert.equal(c.tokens.filter((x) => x.name === "Trooper").length, 3);
+  assert.ok(c.tokens.every((x) => x.mapId === small));
+});
