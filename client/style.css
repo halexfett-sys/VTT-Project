@@ -1861,7 +1861,7 @@ h1,h2,h3,.brand {font-family:Starjhol,SWEuro,sans-serif;letter-spacing:.04em;}
 .save-bar { position: sticky; bottom: 0; padding: 8px 0; background: linear-gradient(transparent, var(--panel) 30%); display: grid; gap: 6px; }
 
 /* ===== Initiative pop-out, roll labels, token faces ===== */
-.init-popout { position: fixed; z-index: 45; top: 132px; left: 244px; width: 270px; max-height: 60vh; overflow: auto;
+.init-popout { position: fixed; z-index: 45; top: 132px; right: 322px; width: 270px; max-height: 60vh; overflow: auto;
   background: #0f1820ee; border: 1px solid var(--gold); border-radius: 10px; box-shadow: 0 8px 28px #000a; backdrop-filter: blur(4px); }
 .init-popout header { display: flex; justify-content: space-between; align-items: center; padding: 8px 10px; border-bottom: 1px solid #2b3d49; font-size: 12px; letter-spacing: .6px; text-transform: uppercase; color: var(--gold); }
 .init-popout header button { width: 24px; height: 24px; padding: 0; margin-left: 4px; }
@@ -1895,7 +1895,17 @@ h1,h2,h3,.brand {font-family:Starjhol,SWEuro,sans-serif;letter-spacing:.04em;}
 .image-adjust { border: 1px solid #2b3d49; border-radius: 8px; margin: 10px 0; padding: 8px 10px; }
 .image-adjust legend { font-size: 11px; letter-spacing: .6px; text-transform: uppercase; color: var(--muted); padding: 0 6px; }
 .token-live-preview { overflow: hidden; }
-@media (max-width: 1100px) { .init-popout { left: 12px; top: 70px; } }
+@media (min-width: 1600px) { .init-popout { right: 346px; } }
+@media (max-width: 1100px) { .init-popout { right: 291px; top: 70px; } }
+.init-popout li[draggable="true"] { cursor: grab; }
+.init-popout li.dragging { opacity: .4; }
+.init-popout li.drop-target { box-shadow: 0 -3px 0 var(--gold); }
+.init-grip { display: grid; place-items: center; width: 14px; color: var(--muted); font-size: 12px; letter-spacing: -2px; user-select: none; }
+.init-move { display: grid; gap: 2px; }
+.init-move button { font-size: 8px; padding: 0 5px; height: 15px; line-height: 1; }
+.init-drop-end { margin: 0 6px 6px; padding: 8px; text-align: center; font-size: 11px; color: var(--gold); border: 1px dashed var(--gold); border-radius: 8px; }
+.d100-result { font-size: 34px; font-weight: 700; color: var(--gold); text-align: center; padding: 6px 0; }
+.clear-log { margin: 0 0 8px auto; display: block; font-size: 11px; padding: 4px 10px; }
 /* Character panel: each skill is one wide horizontal rectangle, name on the left and its dice on the right.
    The left panel itself is widened in the .tabletop:has(.character-panel) rule above. */
 .pool-picked { position: sticky; top: 0; z-index: 3; display: flex; align-items: center; flex-wrap: wrap; gap: 10px; padding: 10px 14px; font-size: 15px; background: #123238; border-width: 2px; box-shadow: 0 4px 10px #0008; }

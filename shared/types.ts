@@ -145,6 +145,8 @@ export type Message = {
   label?: string;
   /** GM-only roll hidden from players. */
   secret?: boolean;
+  /** Result of a percentile (D100) roll, 1 to 100. */
+  d100?: number;
 };
 export type Slot = {
   id: string;

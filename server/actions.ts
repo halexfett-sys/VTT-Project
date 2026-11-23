@@ -3,7 +3,7 @@ import { trees, treesForCharacter } from "../shared/trees.js";
 import { randomInt } from "node:crypto";
 import { z } from "zod";
 import { rollPool } from "../shared/dice.js";
-import { defaultSheet, type Campaign, type Member, type Token } from "../shared/types.js";
+import { defaultSheet, type Campaign, type Member, type Slot, type Token } from "../shared/types.js";
 import { canEdit, id, newMap } from "./state.js";
 const num = z.number().finite(),
   coord = num.min(0).max(20000),
@@ -39,12 +39,12 @@ const appearance = z.object({
 });
 /** Copy wound/strain thresholds, soak and defense from a member's character sheet onto their token.
  *  Targets are the tokens named like the character, or the member's only token. Current wounds and strain are kept. */
-export function applyCharacterToTokens(c: Campaign, m: Member) {
+export function applyCharacterToTokens(c: Campaign, m: Member, namedOnly = false) {
   if (!m.character) return;
   const mine = c.tokens.filter((t) => t.ownerId === m.userId);
   const nm = (m.character.name ?? "").trim().toLowerCase();
   const named = nm ? mine.filter((t) => t.name.trim().toLowerCase() === nm) : [];
-  const targets = named.length ? named : mine.length === 1 ? mine : [];
+  const targets = named.length ? named : !namedOnly && mine.length === 1 ? mine : [];
   for (const t of targets) t.sheet = { ...t.sheet, ...characterTokenStats(m.character) };
 }
 /** Add the trees a character sheet implies (career and specializations) to the member's tree list and tick the talents the sheet
@@ -221,6 +221,11 @@ export function act(
         z: c.tokens.length,
         sheet: p.sheet ?? defaultSheet(),
       });
+      // A token made after the sheet was imported still gets the character's wound/strain thresholds, soak and defense.
+      {
+        const owner = c.members.find((x) => x.userId === ownerId);
+        if (owner?.character && !p.sheet) applyCharacterToTokens(c, owner);
+      }
       break;
     }
     case "token:move": {
@@ -281,6 +286,11 @@ export function act(
       if (p.backAssetId && p.backAssetId !== t.backAssetId) asset(p.backAssetId);
       const { assetId, backAssetId, ...updates } = p;
       Object.assign(t, updates);
+      if (p.name !== undefined && !p.sheet) {
+        // Renaming a token to match the character name hands it the character's stats.
+        const owner = c.members.find((x) => x.userId === t.ownerId);
+        if (owner?.character) applyCharacterToTokens(c, owner, true);
+      }
       if (assetId === null) delete t.assetId;
       else if (assetId !== undefined) t.assetId = assetId;
       if (backAssetId === null) delete t.backAssetId;
@@ -325,8 +335,8 @@ export function act(
       const p = z
         .object({ x: coord, y: coord, base: num.min(8).max(1000), color })
         .parse(input);
-      c.bands ??= [];
-      if (c.bands.length >= 100) throw new Error("Range band limit reached");
+      // Setting a new band down takes the previous one of yours off the map.
+      c.bands = (c.bands ?? []).filter((b) => b.ownerId !== userId);
       c.bands.push({ id: id(), ownerId: userId, mapId: c.activeMapId, ...p });
       break;
     }
@@ -493,6 +503,32 @@ export function act(
       });
       break;
     }
+    case "dice:d100": {
+      const p = z
+        .object({ label: z.string().trim().max(60).optional(), secret: z.boolean().optional() })
+        .parse(input ?? {});
+      if (p.secret) gm();
+      const value = randomInt(1, 101);
+      c.messages.push({
+        id: id(),
+        userId,
+        name: m.name,
+        text: p.label ? `rolled D100 for ${p.label}` : "rolled a D100",
+        time: Date.now(),
+        d100: value,
+        ...(p.label ? { label: p.label } : {}),
+        ...(p.secret ? { to: userId, secret: true } : {}),
+      });
+      break;
+    }
+    case "chat:clear": {
+      // "chat" removes typed messages and whispers; "rolls" removes the roll log (dice pools and D100s).
+      gm();
+      const p = z.object({ scope: z.enum(["chat", "rolls"]) }).parse(input);
+      const isRoll = (x: Campaign["messages"][number]) => Boolean(x.roll) || x.d100 !== undefined;
+      c.messages = c.messages.filter((x) => (p.scope === "rolls" ? !isRoll(x) : isRoll(x)));
+      break;
+    }
     case "destiny:flip": {
       const p = z.object({ side: z.enum(["light", "dark"]) }).parse(input);
       if (c.destiny[p.side] < 1) throw new Error("No points on that side");
@@ -524,13 +560,11 @@ export function act(
         .parse(input);
       if (p.tokenId && !c.tokens.some((t) => t.id === p.tokenId))
         throw new Error("Unknown token");
-      c.initiative.slots.push({ ...p, id: id(), used: false });
-      c.initiative.slots.sort(
-        (a, b) =>
-          b.success - a.success ||
-          b.advantage - a.advantage ||
-          (a.type === "PC" ? -1 : 1),
-      );
+      // Slot into the order by score, leaving any order the GM set by hand untouched.
+      const slot: Slot = { ...p, id: id(), used: false };
+      const rank = (a: Slot) => a.success * 1000 + a.advantage * 2 + (a.type === "PC" ? 1 : 0);
+      const at = c.initiative.slots.findIndex((s) => rank(s) < rank(slot));
+      c.initiative.slots.splice(at === -1 ? c.initiative.slots.length : at, 0, slot);
       break;
     }
     case "initiative:update": {
@@ -549,6 +583,24 @@ export function act(
         if (p.name) slot.name = p.name;
         else delete slot.name;
       }
+      break;
+    }
+    case "initiative:move": {
+      // GM drags a combatant to a new place: before another slot, or to the end when `before` is left out.
+      gm();
+      const p = z.object({ id: key, before: key.optional() }).parse(input);
+      const slots = c.initiative.slots;
+      const from = slots.findIndex((s) => s.id === p.id);
+      if (from === -1) throw new Error("Unknown slot");
+      const [slot] = slots.splice(from, 1);
+      if (p.before) {
+        const to = slots.findIndex((s) => s.id === p.before);
+        if (to === -1) {
+          slots.splice(from, 0, slot);
+          throw new Error("Unknown slot");
+        }
+        slots.splice(to, 0, slot);
+      } else slots.push(slot);
       break;
     }
     case "initiative:remove": {
@@ -620,6 +672,9 @@ export const events = [
   "band:add",
   "band:remove",
   "band:clear",
+  "dice:d100",
+  "chat:clear",
+  "initiative:move",
   "ping:add",
   "profile:update",
   "profile:tree",

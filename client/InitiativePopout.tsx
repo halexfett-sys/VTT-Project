@@ -64,6 +64,12 @@ export default function InitiativePopout({
 }) {
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
   const [collapsed, setCollapsed] = useState(false);
+  // GM drag-and-drop: the slot being carried, and the slot it is hovering over ("end" = below the last one).
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [overId, setOverId] = useState<string | null>(null);
+  const moveSlot = (id: string, before?: string) => {
+    if (id !== before) send("initiative:move", { id, ...(before ? { before } : {}) });
+  };
   const slots = state.initiative.slots;
   if (!slots.length || !slots.some((s) => !dismissed.has(s.id))) return null;
   const next = slots.findIndex((s) => !s.used);
@@ -89,7 +95,38 @@ export default function InitiativePopout({
       {!collapsed && (
         <ol>
           {slots.map((s, i) => (
-            <li key={s.id} className={`${s.used ? "used" : ""} ${i === next ? "current" : ""}`}>
+            <li
+              key={s.id}
+              className={`${s.used ? "used" : ""} ${i === next ? "current" : ""} ${dragId === s.id ? "dragging" : ""} ${gm && dragId && overId === s.id && dragId !== s.id ? "drop-target" : ""}`}
+              draggable={gm}
+              onDragStart={(e) => {
+                if (!gm) return;
+                e.dataTransfer.effectAllowed = "move";
+                e.dataTransfer.setData("text/plain", s.id);
+                setDragId(s.id);
+              }}
+              onDragOver={(e) => {
+                if (!gm || !dragId) return;
+                e.preventDefault();
+                setOverId(s.id);
+              }}
+              onDrop={(e) => {
+                if (!gm || !dragId) return;
+                e.preventDefault();
+                moveSlot(dragId, s.id);
+                setDragId(null);
+                setOverId(null);
+              }}
+              onDragEnd={() => {
+                setDragId(null);
+                setOverId(null);
+              }}
+            >
+              {gm && (
+                <span className="init-grip" aria-hidden="true" title="Drag to reorder">
+                  ⋮⋮
+                </span>
+              )}
               <button
                 className="init-row"
                 onClick={() => send("initiative:use", { id: s.id })}
@@ -100,6 +137,24 @@ export default function InitiativePopout({
                 <SlotFace state={state} slot={s} index={i} gm={gm} room={room} />
                 <span aria-hidden="true">{s.used ? "✓" : i === next ? "▶" : ""}</span>
               </button>
+              {gm && (
+                <span className="init-move">
+                  <button
+                    aria-label="Move up"
+                    disabled={i === 0}
+                    onClick={() => moveSlot(s.id, slots[i - 1].id)}
+                  >
+                    ▲
+                  </button>
+                  <button
+                    aria-label="Move down"
+                    disabled={i === slots.length - 1}
+                    onClick={() => moveSlot(s.id, slots[i + 2]?.id)}
+                  >
+                    ▼
+                  </button>
+                </span>
+              )}
               {gm && (
                 <button
                   className="init-eye"
@@ -113,6 +168,20 @@ export default function InitiativePopout({
             </li>
           ))}
         </ol>
+      )}
+      {!collapsed && gm && dragId && (
+        <div
+          className="init-drop-end"
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={(e) => {
+            e.preventDefault();
+            moveSlot(dragId);
+            setDragId(null);
+            setOverId(null);
+          }}
+        >
+          Drop here to move to the end
+        </div>
       )}
     </aside>
   );

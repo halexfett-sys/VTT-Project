@@ -152,3 +152,14 @@ test('import reads the talents bought in each specialization as tree positions, 
  assert.deepEqual(c.treeProgress,[{spec:'Charmer',nodes:[0,6]}]);
  assert.ok(warnings.some(w=>/Madeup Spec/.test(w)));
 });
+test("empty or bonus-only derived stats fall back to values worked out from the characteristics", async () => {
+  const { importOggDude } = await import("../shared/oggdude");
+  const xml = `<Character><Description><CharName>Vex</CharName></Description><Species><SpeciesKey>HUMAN</SpeciesKey></Species>
+   <Characteristics><CharCharacteristic><Key>BR</Key><Rank><StartingRanks>3</StartingRanks></Rank></CharCharacteristic>
+   <CharCharacteristic><Key>WIL</Key><Rank><StartingRanks>2</StartingRanks></Rank></CharCharacteristic></Characteristics>
+   <Attributes><SoakValue></SoakValue><WoundThreshold>0</WoundThreshold><StrainThreshold><TalentRanks>1</TalentRanks></StrainThreshold></Attributes></Character>`;
+  const { character: ch } = importOggDude(xml);
+  assert.equal(ch.soak, 3);
+  assert.equal(ch.woundThreshold, 13);
+  assert.equal(ch.strainThreshold, 13);
+});

@@ -256,22 +256,42 @@ export function importOggDude(xml: string): ImportResult {
     defenseRanged: stat(["DefenseRanged", "RangedDefense", "DefRanged"], /^(DEFENSERANGED|RANGEDDEFENSE|DEFRANGED)$/),
     defenseMelee: stat(["DefenseMelee", "MeleeDefense", "DefMelee"], /^(DEFENSEMELEE|MELEEDEFENSE|DEFMELEE)$/),
   };
+  const base = speciesBase[keyNorm(c.species ?? "")] ?? speciesBase[keyNorm(text(all(doc, "SpeciesKey")[0]))];
+  const { brawn, willpower } = c.characteristics;
+  // A tag that is present but empty or zero is not a real value: no character has a zero threshold, and soak is never below Brawn.
+  // A stored number below its own characteristic cannot include that characteristic, so it is treated as the bonus on top of it.
+  if (derived.woundThreshold !== undefined && derived.woundThreshold <= 0) derived.woundThreshold = undefined;
+  if (derived.strainThreshold !== undefined && derived.strainThreshold <= 0) derived.strainThreshold = undefined;
+  const estimated: string[] = [];
+  const adjusted: string[] = [];
+  if (derived.soak !== undefined && derived.soak < brawn) {
+    derived.soak = brawn + derived.soak;
+    adjusted.push("soak");
+  }
+  if (derived.woundThreshold !== undefined && derived.woundThreshold < brawn) {
+    derived.woundThreshold = (base?.wounds ?? 0) + brawn + derived.woundThreshold;
+    adjusted.push("wound threshold");
+  }
+  if (derived.strainThreshold !== undefined && derived.strainThreshold < willpower) {
+    derived.strainThreshold = (base?.strain ?? 0) + willpower + derived.strainThreshold;
+    adjusted.push("strain threshold");
+  }
   for (const [k, v] of Object.entries(derived))
     if (v !== undefined) (c as Record<string, unknown>)[k] = Math.max(0, Math.min(99, Math.round(v)));
-  const estimated: string[] = [];
-  if (derived.soak === undefined) {
-    c.soak = c.characteristics.brawn; // soak is at least Brawn
+  if (derived.soak === undefined || derived.soak <= 0) {
+    c.soak = brawn; // soak is at least Brawn
     estimated.push("soak (Brawn only, armor not counted)");
   }
-  const base = speciesBase[keyNorm(c.species ?? "")] ?? speciesBase[keyNorm(text(all(doc, "SpeciesKey")[0]))];
   if (derived.woundThreshold === undefined && base) {
-    c.woundThreshold = Math.min(99, base.wounds + c.characteristics.brawn);
+    c.woundThreshold = Math.min(99, base.wounds + brawn);
     estimated.push("wound threshold (species + Brawn)");
   }
   if (derived.strainThreshold === undefined && base) {
-    c.strainThreshold = Math.min(99, base.strain + c.characteristics.willpower);
+    c.strainThreshold = Math.min(99, base.strain + willpower);
     estimated.push("strain threshold (species + Willpower)");
   }
+  if (adjusted.length)
+    warnings.push(`The stored ${adjusted.join(", ")} looked like a bonus without the characteristic, so it was added to the characteristic. Check ${adjusted.length > 1 ? "them" : "it"} below.`);
   if (estimated.length)
     warnings.push(
       `This file does not store ${estimated.join(", ")}; these were worked out from the species and characteristics, so talents such as Toughened or Grit are not included. Check them below.`,

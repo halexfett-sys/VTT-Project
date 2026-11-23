@@ -1,4 +1,5 @@
 import test from "node:test";
+import { emptyCharacter } from "../shared/character";
 import assert from "node:assert/strict";
 import { act } from "../server/actions";
 import { newCampaign, viewFor, id } from "../server/state";
@@ -92,4 +93,60 @@ test("old pings are pruned on the next action", () => {
   c.pings![0].time -= 60_000;
   act(c, gm, "chat:send", { text: "hello" });
   assert.equal(c.pings!.length, 0);
+});
+test("a new range band replaces the placer's previous one", () => {
+  const { c, gm, player } = fixture();
+  act(c, player, "band:add", { x: 1, y: 1, base: 64, color: "#ffffff" });
+  act(c, gm, "band:add", { x: 2, y: 2, base: 64, color: "#ffffff" });
+  act(c, player, "band:add", { x: 3, y: 3, base: 64, color: "#ff0000" });
+  assert.equal(c.bands!.length, 2);
+  assert.deepEqual(c.bands!.filter((b) => b.ownerId === player).map((b) => b.x), [3]);
+});
+test("D100 rolls land in the log, secret ones stay GM-only", () => {
+  const { c, gm, player, other } = fixture();
+  act(c, player, "dice:d100", { label: "Percentile" });
+  const roll = c.messages.at(-1)!;
+  assert.ok(roll.d100! >= 1 && roll.d100! <= 100);
+  assert.equal(viewFor(c, other).messages.at(-1)!.d100, roll.d100);
+  assert.throws(() => act(c, player, "dice:d100", { secret: true }), /GM/);
+  act(c, gm, "dice:d100", { secret: true });
+  assert.equal(viewFor(c, player).messages.filter((m) => m.d100 !== undefined).length, 1);
+});
+test("only the GM clears chat or the roll log, and each clears only its own kind", () => {
+  const { c, gm, player } = fixture();
+  act(c, player, "chat:send", { text: "hello" });
+  act(c, player, "dice:roll", { ability: 2 });
+  act(c, player, "dice:d100", {});
+  assert.throws(() => act(c, player, "chat:clear", { scope: "chat" }), /GM/);
+  act(c, gm, "chat:clear", { scope: "chat" });
+  assert.deepEqual(c.messages.map((m) => Boolean(m.roll) || m.d100 !== undefined), [true, true]);
+  act(c, gm, "chat:clear", { scope: "rolls" });
+  assert.equal(c.messages.length, 0);
+});
+test("GM can drag initiative slots; added combatants slot in without undoing the order", () => {
+  const { c, gm, player } = fixture();
+  for (const [type, success, name] of [["PC", 5, "A"], ["NPC", 4, "B"], ["PC", 3, "C"]] as const)
+    act(c, gm, "initiative:add", { type, success, advantage: 0, name });
+  const [a, b, cc] = c.initiative.slots.map((s) => s.id);
+  assert.throws(() => act(c, player, "initiative:move", { id: a }), /GM/);
+  act(c, gm, "initiative:move", { id: cc, before: a });
+  assert.deepEqual(c.initiative.slots.map((s) => s.name), ["C", "A", "B"]);
+  act(c, gm, "initiative:move", { id: cc });
+  assert.deepEqual(c.initiative.slots.map((s) => s.name), ["A", "B", "C"]);
+  act(c, gm, "initiative:move", { id: b, before: a });
+  act(c, gm, "initiative:add", { type: "NPC", success: 1, advantage: 0, name: "D" });
+  assert.deepEqual(c.initiative.slots.map((s) => s.name), ["B", "A", "C", "D"]);
+});
+test("a token created after the sheet was imported gets the character's thresholds, soak and defense", () => {
+  const { c, player } = fixture();
+  const sheetChar = { ...emptyCharacter(), name: "Kira", soak: 5, woundThreshold: 16, strainThreshold: 14, defenseMelee: 1 };
+  act(c, player, "profile:update", { character: sheetChar });
+  act(c, player, "token:create", { name: "Kira" });
+  const t = c.tokens[0];
+  assert.equal(t.sheet.soak, 5);
+  assert.equal(t.sheet.woundThreshold, 16);
+  assert.equal(t.sheet.strainThreshold, 14);
+  assert.equal(t.sheet.defense, 1);
+  act(c, player, "token:create", { name: "Companion" });
+  assert.equal(c.tokens[1].sheet.woundThreshold, 12, "unrelated second token is left alone");
 });

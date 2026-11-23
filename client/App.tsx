@@ -1290,6 +1290,18 @@ export default function App() {
             ◇ Roll dice pool{" "}
             <span>{Object.values(pool).reduce((a, b) => a + b, 0)}</span>
           </button>
+          <button
+            className="full roll-button d100-button"
+            disabled={!connected}
+            onClick={() =>
+              send("dice:d100", {
+                ...(poolLabel ? { label: poolLabel } : {}),
+                ...(gm && secretRoll ? { secret: true } : {}),
+              })
+            }
+          >
+            ◇ Roll D100
+          </button>
         </section>
         <nav className="panel-tabs">
           <button
@@ -1445,6 +1457,19 @@ export default function App() {
         ) : (
           <>
             <div className="chat-log">
+              {gm && (
+                <button
+                  type="button"
+                  className="clear-log"
+                  onClick={() => {
+                    const rolls = tab === "rolls";
+                    if (window.confirm(rolls ? "Clear the roll log for everyone?" : "Clear the chat for everyone? Dice rolls stay in the roll log."))
+                      send("chat:clear", { scope: rolls ? "rolls" : "chat" });
+                  }}
+                >
+                  {tab === "rolls" ? "Clear roll log" : "Clear chat"}
+                </button>
+              )}
               <div className="system-note">
                 <span>◈</span>
                 <strong>Uplink established</strong>
@@ -1455,10 +1480,10 @@ export default function App() {
                 </p>
               </div>
               {state.messages
-                .filter((m) => tab === "comms" || m.roll)
+                .filter((m) => tab === "comms" || m.roll || m.d100 !== undefined)
                 .map((m) => (
                   <article
-                    className={`message ${m.roll ? "roll-message" : ""}`}
+                    className={`message ${m.roll || m.d100 !== undefined ? "roll-message" : ""}`}
                     key={m.id}
                   >
                     <header>
@@ -1530,6 +1555,14 @@ export default function App() {
                             {m.roll.net.despair > 0 && " · Despair"}
                           </div>
                         )}
+                      </>
+                    ) : m.d100 !== undefined ? (
+                      <>
+                        {m.label && <b className="roll-label">{m.label}</b>}
+                        <small>ROLLED D100</small>
+                        <div className="d100-result" aria-label={`D100 result ${m.d100}`}>
+                          {m.d100}
+                        </div>
                       </>
                     ) : (
                       <p>{m.text}</p>
