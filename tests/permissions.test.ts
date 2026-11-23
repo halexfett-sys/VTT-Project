@@ -94,12 +94,16 @@ test("players cannot edit maps, fog, NPC slots, destiny totals or push handouts"
   );
 });
 
-test("inactive scene tokens stay out of player snapshots", () => {
+test("tokens belong to the table and follow it across scenes, but hidden ones stay out of player snapshots", () => {
   const { c, gm, player } = fixture();
-  act(c, gm, "token:create", { name: "Future encounter" });
+  act(c, gm, "token:create", { name: "Ally" });
+  act(c, gm, "token:create", { name: "Ambush", hidden: true });
   act(c, gm, "map:create", { name: "Current scene" });
-  assert.equal(viewFor(c, player).tokens.length, 0);
-  assert.equal(viewFor(c, gm).tokens.length, 1);
+  assert.deepEqual(
+    viewFor(c, player).tokens.map((t) => t.name),
+    ["Ally"],
+  );
+  assert.equal(viewFor(c, gm).tokens.length, 2);
 });
 
 test("scene deletion is GM-only and validates the complete selection before mutation", () => {
@@ -113,7 +117,7 @@ test("scene deletion is GM-only and validates the complete selection before muta
   );
   assert.equal(c.maps[0].id, original);
 });
-test("deleting selected scenes removes their tokens and switches the active map", () => {
+test("deleting selected scenes keeps the table's tokens and switches the active map", () => {
   const { c, gm } = fixture(),
     first = c.maps[0].id;
   act(c, gm, "token:create", { name: "Keep" });
@@ -124,8 +128,9 @@ test("deleting selected scenes removes their tokens and switches the active map"
   assert.equal(c.activeMapId, first);
   assert.deepEqual(
     c.tokens.map((t) => t.name),
-    ["Keep"],
+    ["Keep", "Remove"],
   );
+  assert.ok(c.tokens.every((t) => t.mapId === first));
   assert.deepEqual(
     c.maps.map((m) => m.id),
     [first],
@@ -148,15 +153,16 @@ test("deleting inactive scenes preserves the active scene and reusable assets", 
   assert.equal(c.activeMapId, active);
   assert.equal(c.assets.length, 1);
 });
-test("deleting all scenes creates a valid replacement and clears placed tokens", () => {
+test("deleting all scenes creates a valid replacement and keeps the table's tokens", () => {
   const { c, gm, player } = fixture();
-  act(c, gm, "token:create", { name: "Remove" });
+  act(c, gm, "token:create", { name: "Stays" });
   const original = c.activeMapId;
   act(c, gm, "map:delete", { ids: [original, original] });
   assert.equal(c.maps.length, 1);
   assert.notEqual(c.activeMapId, original);
   assert.equal(c.activeMapId, c.maps[0].id);
-  assert.deepEqual(c.tokens, []);
+  assert.equal(c.tokens.length, 1);
+  assert.equal(c.tokens[0].mapId, c.activeMapId);
   assert.equal(viewFor(c, player).maps[0].id, c.activeMapId);
 });
 

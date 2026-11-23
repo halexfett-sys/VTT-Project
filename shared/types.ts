@@ -58,6 +58,27 @@ export type MapScene = {
   fogRevision?: string;
   hasImage?: boolean;
 };
+/** A range band set down on the map. Shared: every player at the table sees it. */
+export type RangeBand = {
+  id: string;
+  ownerId: string;
+  mapId: string;
+  x: number;
+  y: number;
+  /** Radius of the Engaged ring in map pixels; the other rings are multiples of it. */
+  base: number;
+  color: string;
+};
+/** A short-lived "look here" marker. Pruned by the server after a few seconds. */
+export type Ping = {
+  id: string;
+  userId: string;
+  mapId: string;
+  x: number;
+  y: number;
+  color: string;
+  time: number;
+};
 export type Sheet = {
   wounds: number;
   woundThreshold: number;
@@ -150,6 +171,8 @@ export type Campaign = {
   destiny: { light: number; dark: number };
   initiative: { round: number; slots: Slot[] };
   handout?: { id: string; assetId: string; title: string };
+  bands?: RangeBand[];
+  pings?: Ping[];
 };
 export const defaultSheet = (): Sheet => ({
   wounds: 0,

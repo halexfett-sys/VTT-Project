@@ -86,6 +86,7 @@ export function registerSaves(app:Express,store:ReturnType<typeof openDatabase>,
   c.id=id();c.invite=randomBytes(16).toString('hex');c.revision=0;
   c.members=c.members.map(m=>({...m,userId:users.get(m.userId)!,role:m.userId===file.exporterId?'gm':'player',portrait:image(m.portrait),art:m.art.map(a=>image(a)!)}));
   c.tokens=c.tokens.map(t=>({...t,id:id(),ownerId:users.get(t.ownerId)!,assetId:image(t.assetId),backAssetId:image(t.backAssetId)}));
+  c.bands=(c.bands??[]).map(b=>({...b,id:id(),ownerId:users.get(b.ownerId)!}));
   c.initiative.slots.forEach(s=>{delete s.tokenId;}); // token ids are regenerated on import
   c.maps=c.maps.map(m=>({...m,assetId:image(m.assetId)}));
   c.assets=[...decoded.values()].map(({asset})=>({...asset,ownerId:users.get(asset.ownerId)!}));

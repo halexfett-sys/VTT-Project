@@ -81,15 +81,10 @@ export function viewFor(c: Campaign, userId: string): Campaign {
     copy.members = mine(copy.members);
     return copy;
   }
-  const tokens = c.tokens.filter(
-    (t) =>
-      t.mapId === c.activeMapId &&
-      !t.hidden &&
-      !obscured(
-        c.maps.find((m) => m.id === t.mapId)!,
-        t,
-      ),
-  );
+  // Tokens belong to the whole table, so they follow the table from scene to scene.
+  // Fog is judged against the scene everyone is looking at.
+  const active = c.maps.find((m) => m.id === c.activeMapId)!;
+  const tokens = c.tokens.filter((t) => !t.hidden && !obscured(active, t));
   // A token's back image is only revealed to other players once the token has been flipped.
   const showBack = (t: Token) => Boolean(t.flipped) || t.ownerId === userId;
   const allowed = new Set([
@@ -142,5 +137,7 @@ export function viewFor(c: Campaign, userId: string): Campaign {
     messages: c.messages.filter(
       (m) => !m.to || m.to === userId || m.userId === userId,
     ),
+    bands: (c.bands ?? []).filter((b) => b.mapId === c.activeMapId),
+    pings: (c.pings ?? []).filter((p) => p.mapId === c.activeMapId),
   };
 }

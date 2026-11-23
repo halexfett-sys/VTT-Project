@@ -301,6 +301,11 @@ export function registerCloudSaves(
           assetId: image(t.assetId),
           backAssetId: image(t.backAssetId),
         }));
+        c.bands = (c.bands ?? []).map((b) => ({
+          ...b,
+          id: id(),
+          ownerId: users.get(b.ownerId)!,
+        }));
         c.initiative.slots.forEach((s) => {
           delete s.tokenId; // token ids are regenerated on import
         });

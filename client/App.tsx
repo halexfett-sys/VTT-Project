@@ -525,7 +525,8 @@ export default function App() {
     libraryOwnerName = state.members.find((m) => m.userId === libraryOwnerId)?.name ?? "";
   const updateGrid = (patch: Partial<Grid>) =>
     send("map:grid", { ...map.grid, ...patch });
-  const visibleTokens = state.tokens.filter((t) => t.mapId === map.id);
+  // Tokens belong to the whole table and stay put when the scene changes.
+  const visibleTokens = state.tokens;
   return (
     <div className="tabletop" onClick={() => menu && setMenu(null)}>
       <header className="topbar">
@@ -1078,6 +1079,7 @@ export default function App() {
                 ["pan", "✥", "Pan"],
                 ["ruler", "↔", "Measure"],
                 ["range", "◎", "Range bands"],
+                ["ping", "◉", "Ping a location"],
                 ...(gm
                   ? [
                       ["hide", "▧", "Hide fog"],
@@ -1105,6 +1107,18 @@ export default function App() {
                 : tool.toUpperCase()}
           </span>
           {tool === "range" && <div className="range-base"><SliderField live label="Range band radius" unit=" px" min={8} max={1000} step={4} value={rangeBase} onCommit={setRangeBase} /></div>}
+          {tool === "range" && (
+            <div className="range-actions">
+              <button type="button" className="inspect" onClick={() => send("band:clear", {})}>
+                Clear my bands
+              </button>
+              {gm && (
+                <button type="button" className="inspect" onClick={() => send("band:clear", { all: true })}>
+                  Clear all bands
+                </button>
+              )}
+            </div>
+          )}
           {tool === "range" && (
             <div className="range-colors" role="group" aria-label="Range band color">
               {["#f2be74", "#ff5a5f", "#65d4c1", "#ffffff", "#7aa2ff", "#d38cff", "#000000"].map((c) => (
@@ -1379,7 +1393,6 @@ export default function App() {
                   <select name="tokenId" defaultValue="">
                     <option value="">No token</option>
                     {state.tokens
-                      .filter((t) => t.mapId === state.activeMapId)
                       .map((t) => (
                         <option key={t.id} value={t.id}>
                           {t.name}
@@ -1720,13 +1733,8 @@ export default function App() {
                 <p>
                   This permanently removes {sceneSelection.length} selected
                   scene{sceneSelection.length === 1 ? "" : "s"}, including their
-                  fog and{" "}
-                  {
-                    state.tokens.filter((t) => sceneSelection.includes(t.mapId))
-                      .length
-                  }{" "}
-                  placed tokens and character sheets. Uploaded images stay in
-                  the library.
+                  fog and range bands. Tokens belong to the whole table, so they
+                  stay. Uploaded images stay in the library.
                 </p>
                 <ul className="scene-delete-list">
                   {state.maps

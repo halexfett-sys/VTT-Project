@@ -10,6 +10,8 @@ const num = z.number().finite(),
   color = z.string().regex(/^#[0-9a-f]{6}$/i),
   name = z.string().trim().min(1).max(80),
   key = z.string().uuid();
+/** How long a ping stays in the table state. Clients fade it out sooner than this. */
+const PING_LIFETIME_MS = 8000;
 const sheet = z.object({
   wounds: num.min(0).max(9999),
   woundThreshold: num.min(0).max(9999),
@@ -82,6 +84,8 @@ export function act(
 ) {
   const m = c.members.find((m) => m.userId === userId);
   if (!m) throw new Error("Join this campaign first");
+  // Pings are short-lived; drop any that have faded so they never pile up in the saved table.
+  if (c.pings?.length) c.pings = c.pings.filter((p) => Date.now() - p.time < PING_LIFETIME_MS);
   const gm = () => {
     if (m.role !== "gm") throw new Error("GM permission required");
   };
@@ -129,11 +133,14 @@ export function act(
         throw new Error(
           "A selected scene no longer exists. Reopen Manage scenes.",
         );
-      // Delete scene instances and their placed tokens, retaining reusable uploads.
+      // Delete scene instances, retaining reusable uploads. Tokens belong to the whole table, so they stay.
       c.maps = c.maps.filter((map) => !selected.has(map.id));
-      c.tokens = c.tokens.filter((token) => !selected.has(token.mapId));
       if (!c.maps.length) c.maps.push(newMap());
       if (selected.has(c.activeMapId)) c.activeMapId = c.maps[0].id;
+      for (const token of c.tokens)
+        if (!c.maps.some((map) => map.id === token.mapId)) token.mapId = c.activeMapId;
+      c.bands = (c.bands ?? []).filter((b) => !selected.has(b.mapId));
+      c.pings = (c.pings ?? []).filter((p) => !selected.has(p.mapId));
       break;
     }
     case "map:grid": {
@@ -219,7 +226,7 @@ export function act(
     case "token:move": {
       const p = z.object({ id: key, x: coord, y: coord }).parse(input);
       const t = token(p.id),
-        map = c.maps.find((m) => m.id === t.mapId)!;
+        map = c.maps.find((m) => m.id === c.activeMapId)!;
       let { x, y } = p;
       if (map.grid.snap) {
         const g = map.grid;
@@ -246,6 +253,7 @@ export function act(
       }
       t.x = Math.max(0, Math.min(map.width, x));
       t.y = Math.max(0, Math.min(map.height, y));
+      t.mapId = map.id;
       break;
     }
     case "token:update": {
@@ -310,6 +318,46 @@ export function act(
       token(p.id).z = p.front
         ? Math.max(...c.tokens.map((t) => t.z)) + 1
         : Math.min(...c.tokens.map((t) => t.z)) - 1;
+      break;
+    }
+    case "band:add": {
+      // Range bands are shared table furniture: anyone can set one down and everyone sees it.
+      const p = z
+        .object({ x: coord, y: coord, base: num.min(8).max(1000), color })
+        .parse(input);
+      c.bands ??= [];
+      if (c.bands.length >= 100) throw new Error("Range band limit reached");
+      c.bands.push({ id: id(), ownerId: userId, mapId: c.activeMapId, ...p });
+      break;
+    }
+    case "band:remove": {
+      const p = z.object({ id: key }).parse(input);
+      const b = (c.bands ?? []).find((b) => b.id === p.id);
+      if (!b) break;
+      if (m.role !== "gm" && b.ownerId !== userId)
+        throw new Error("Only the GM or the band's owner can remove it");
+      c.bands = c.bands!.filter((x) => x.id !== p.id);
+      break;
+    }
+    case "band:clear": {
+      // Everyone can clear their own bands; the GM can clear the whole scene.
+      const p = z.object({ all: z.boolean().optional() }).parse(input);
+      if (p.all) gm();
+      c.bands = (c.bands ?? []).filter(
+        (b) => b.mapId !== c.activeMapId || (!p.all && b.ownerId !== userId),
+      );
+      break;
+    }
+    case "ping:add": {
+      const p = z.object({ x: coord, y: coord }).parse(input);
+      const mine = (c.pings ?? []).filter((x) => x.userId === userId);
+      // One ping per person every half second; stops a held button from flooding the table.
+      if (mine.some((x) => Date.now() - x.time < 500)) break;
+      const rest = (c.pings ?? []).filter((x) => x.userId !== userId || Date.now() - x.time < 3000);
+      c.pings = [
+        ...rest.slice(-19),
+        { id: id(), userId, mapId: c.activeMapId, x: p.x, y: p.y, color: m.color, time: Date.now() },
+      ];
       break;
     }
     case "profile:update": {
@@ -569,6 +617,10 @@ export const events = [
   "token:delete",
   "token:duplicate",
   "token:layer",
+  "band:add",
+  "band:remove",
+  "band:clear",
+  "ping:add",
   "profile:update",
   "profile:tree",
   "asset:delete",

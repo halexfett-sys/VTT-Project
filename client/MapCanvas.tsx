@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { Campaign, Point, Token } from "../shared/types";
 import { assetUrl } from "./api";
 import { containCircleFactor } from "./tokenFit";
-export type Tool = "select" | "pan" | "ruler" | "hide" | "reveal" | "range";
+export type Tool = "select" | "pan" | "ruler" | "hide" | "reveal" | "range" | "ping";
 type Props = {
   state: Campaign;
   userId: string;
@@ -64,7 +64,9 @@ export default function MapCanvas({
     measure = useRef<{ a: Point; b: Point } | null>(null),
     stroke = useRef<Point[]>([]),
     pointers = useRef(new Map<number, Point>()),
-    lastSend = useRef(0);
+    lastSend = useRef(0),
+    // When this browser first saw each ping, so the pulse animates the same way on every screen.
+    pingSeen = useRef(new Map<string, number>());
   const map = state.maps.find((m) => m.id === state.activeMapId)!;
   const gm = state.members.find((m) => m.userId === userId)?.role === "gm";
   const fogVersion = gm ? "gm" : state.revision; // masked images are private and never browser-cached
@@ -124,6 +126,31 @@ export default function MapCanvas({
         images.current.set(url, img);
       }
       return img.complete && img.naturalWidth ? img : null;
+    };
+    const drawRings = (x: number, y: number, base: number, ringColor: string, zoom: number) => {
+      ctx.font = `${15 / zoom}px SWEuro, sans-serif`;
+      ctx.textAlign = "left";
+      ["Engaged", "Short", "Medium", "Long", "Extreme"].forEach((name, i) => {
+        const radius = [1, 3, 6, 10, 15][i] * base;
+        ctx.beginPath();
+        ctx.arc(x, y, radius, 0, Math.PI * 2);
+        // A dark halo under the colored ring keeps it readable on light and dark maps alike.
+        ctx.globalAlpha = 0.55;
+        ctx.strokeStyle = "#05090d";
+        ctx.lineWidth = 5 / zoom;
+        ctx.stroke();
+        ctx.globalAlpha = 0.9;
+        ctx.strokeStyle = ringColor;
+        ctx.lineWidth = 2.5 / zoom;
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+        ctx.lineJoin = "round";
+        ctx.strokeStyle = "#05090d";
+        ctx.lineWidth = 4 / zoom;
+        ctx.strokeText(name, x + radius + 5, y);
+        ctx.fillStyle = ringColor;
+        ctx.fillText(name, x + radius + 5, y);
+      });
     };
     const draw = () => {
       const { state: s, userId, selected } = current.current,
@@ -221,9 +248,7 @@ export default function MapCanvas({
         ctx.drawImage(off, 0, 0);
         ctx.globalAlpha = 1;
       }
-      for (const t of s.tokens
-        .filter((t) => t.mapId === m.id)
-        .sort((a, b) => a.z - b.z)) {
+      for (const t of [...s.tokens].sort((a, b) => a.z - b.z)) {
         let p = positions.current.get(t.id) || { x: t.x, y: t.y };
         if (drag.current?.id === t.id)
           p = { x: drag.current.x, y: drag.current.y };
@@ -317,6 +342,49 @@ export default function MapCanvas({
           ctx.fillText(t.status, p.x, p.y - size / 2 - 10 / cam.zoom);
         }
       }
+      // Range bands that have been set down are shared: everyone at the table sees the same rings.
+      for (const b of s.bands ?? []) {
+        if (b.mapId !== m.id) continue;
+        drawRings(b.x, b.y, b.base, b.color, cam.zoom);
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, 4 / cam.zoom, 0, Math.PI * 2);
+        ctx.fillStyle = b.color;
+        ctx.fill();
+      }
+      // Pings pulse for a few seconds, then fade.
+      const nowMs = performance.now();
+      for (const p of s.pings ?? []) {
+        if (p.mapId !== m.id) continue;
+        let seen = pingSeen.current.get(p.id);
+        if (seen === undefined) {
+          seen = nowMs;
+          pingSeen.current.set(p.id, seen);
+        }
+        const age = (nowMs - seen) / 1000;
+        if (age > 3.5) continue;
+        const fade = 1 - age / 3.5;
+        for (let i = 0; i < 3; i++) {
+          const q = (age * 1.1 + i / 3) % 1;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, (10 + q * 70) / cam.zoom, 0, Math.PI * 2);
+          ctx.globalAlpha = (1 - q) * fade;
+          ctx.strokeStyle = p.color;
+          ctx.lineWidth = 3 / cam.zoom;
+          ctx.stroke();
+        }
+        ctx.globalAlpha = fade;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 6 / cam.zoom, 0, Math.PI * 2);
+        ctx.fillStyle = p.color;
+        ctx.fill();
+        ctx.lineWidth = 2 / cam.zoom;
+        ctx.strokeStyle = "#05090d";
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
+      if (pingSeen.current.size > 60)
+        for (const id of pingSeen.current.keys())
+          if (!(s.pings ?? []).some((p) => p.id === id)) pingSeen.current.delete(id);
       const ruler = measure.current;
       if (ruler) {
         const dist =
@@ -337,32 +405,8 @@ export default function MapCanvas({
           ruler.b.x + 12 / cam.zoom,
           ruler.b.y - 12 / cam.zoom,
         );
-        if (current.current.tool === "range") {
-          const ringColor = current.current.rangeColor || "#f2be74";
-          ["Engaged", "Short", "Medium", "Long", "Extreme"].forEach(
-            (name, i) => {
-              const radius = [1, 3, 6, 10, 15][i] * current.current.rangeBase;
-              ctx.beginPath();
-              ctx.arc(ruler.a.x, ruler.a.y, radius, 0, Math.PI * 2);
-              // A dark halo under the colored ring keeps it readable on light and dark maps alike.
-              ctx.globalAlpha = 0.55;
-              ctx.strokeStyle = "#05090d";
-              ctx.lineWidth = 5 / cam.zoom;
-              ctx.stroke();
-              ctx.globalAlpha = 0.9;
-              ctx.strokeStyle = ringColor;
-              ctx.lineWidth = 2.5 / cam.zoom;
-              ctx.stroke();
-              ctx.globalAlpha = 1;
-              ctx.lineJoin = "round";
-              ctx.strokeStyle = "#05090d";
-              ctx.lineWidth = 4 / cam.zoom;
-              ctx.strokeText(name, ruler.a.x + radius + 5, ruler.a.y);
-              ctx.fillStyle = ringColor;
-              ctx.fillText(name, ruler.a.x + radius + 5, ruler.a.y);
-            },
-          );
-        }
+        if (current.current.tool === "range")
+          drawRings(ruler.a.x, ruler.a.y, current.current.rangeBase, current.current.rangeColor || "#f2be74", cam.zoom);
       }
       if (stroke.current.length) {
         ctx.strokeStyle =
@@ -399,7 +443,6 @@ export default function MapCanvas({
       .sort((a, b) => b.z - a.z)
       .find(
         (t) =>
-          t.mapId === map.id &&
           (t.appearance?.shape === "square"
             ? Math.max(Math.abs(p.x - t.x), Math.abs(p.y - t.y))
             : Math.hypot(p.x - t.x, p.y - t.y)) <
@@ -479,10 +522,22 @@ export default function MapCanvas({
         }}
         onContextMenu={(e) => {
           e.preventDefault();
-          const t = hit(world(screen(e)));
+          const spot = world(screen(e));
+          const t = hit(spot);
           if (t && (gm || t.ownerId === userId)) {
             onSelect(t.id);
             onMenu(t.id, e.clientX, e.clientY);
+            return;
+          }
+          // Right-click the centre dot of a range band to take it down (its owner or the GM).
+          if (!t && tool === "range") {
+            const band = (state.bands ?? []).find(
+              (b) =>
+                b.mapId === map.id &&
+                (gm || b.ownerId === userId) &&
+                Math.hypot(b.x - spot.x, b.y - spot.y) < 14 / camera.current.zoom,
+            );
+            if (band) send("band:remove", { id: band.id });
           }
         }}
         onPointerDown={(e) => {
@@ -500,6 +555,11 @@ export default function MapCanvas({
           }
           if ((tool === "hide" || tool === "reveal") && gm) {
             stroke.current = [w];
+            return;
+          }
+          // The ping tool, or Alt+click with any tool, shows everyone a spot on the map.
+          if (tool === "ping" || e.altKey) {
+            send("ping:add", { x: w.x, y: w.y });
             return;
           }
           if (tool === "ruler" || tool === "range") {
@@ -559,6 +619,12 @@ export default function MapCanvas({
         }}
         onPointerUp={(e) => {
           pointers.current.delete(e.pointerId);
+          // Letting go with the range tool sets the band down for the whole table.
+          if (tool === "range" && drag.current?.ruler && measure.current) {
+            const a = measure.current.a;
+            send("band:add", { x: a.x, y: a.y, base: rangeBase, color: rangeColor });
+            measure.current = null;
+          }
           finish();
         }}
         onPointerCancel={(e) => {
@@ -579,7 +645,9 @@ export default function MapCanvas({
       <div className="map-bottom">
         <span>
           {tool === "range"
-            ? "Range rings are adjustable narrative guides, not fixed rules distances."
+            ? "Click to set a range band everyone can see · right-click its centre dot to remove it"
+            : tool === "ping"
+              ? "Click anywhere to ping that spot for everyone · Alt+click works with any tool"
             : tool === "hide" || tool === "reveal"
               ? "Draw on the map to edit fog of war."
               : "Drag to pan · Scroll to zoom · Right-click a token for actions"}
